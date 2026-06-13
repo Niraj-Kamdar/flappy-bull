@@ -1,11 +1,11 @@
-import { useRef } from "react";
 import { WalletButton } from "./components/WalletButton";
 import { PriceDisplay } from "./components/PriceDisplay";
-import { PixiCanvas, PixiAppRef } from "./components/PixiCanvas";
+import { GameCanvas } from "./components/GameCanvas";
 import { DelegateTest } from "./components/DelegateTest";
+import { usePriceOracle } from "./hooks/usePriceOracle";
 
 export function App() {
-  const appRef = useRef<PixiAppRef>(null);
+  const { price } = usePriceOracle();
 
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px" }}>
@@ -21,7 +21,7 @@ export function App() {
         <WalletButton />
       </div>
 
-      <PixiCanvas appRef={appRef} />
+      <GameCanvas price={price} />
       <DelegateTest />
     </div>
   );
