@@ -18,11 +18,11 @@
 - Full round-trip test: init `GameSession` on base layer → delegate to ER → query `getDelegationStatus` → undelegate back
 
 ### UAT
-- [ ] Page loads; blank PixiJS canvas visible; browser console shows stable 60fps via `requestAnimationFrame`
-- [ ] Connect wallet button works; wallet address shown in header
-- [ ] Live SOL/USD price number updates on screen (at least once per second)
-- [ ] Click "Delegate Test" → transaction signed on base layer → `getDelegationStatus` returns ER endpoint → `GameSession` account visible on ER
-- [ ] Click "Undelegate" → `GameSession` back on base layer, ER no longer serves it
+- [x] Page loads; blank PixiJS canvas visible; browser console shows stable 60fps via `requestAnimationFrame`
+- [x] Connect wallet button works; wallet address shown in header
+- [x] Live SOL/USD price number updates on screen (at least once per second)
+- [x] Click "Delegate Test" → transaction signed on base layer → `getDelegationStatus` returns ER endpoint → `GameSession` account visible on ER
+- [x] Click "Undelegate" → `GameSession` back on base layer, ER no longer serves it
 
 ---
 
@@ -41,13 +41,13 @@
 - Start screen overlay; death screen overlay with final score
 
 ### UAT
-- [ ] Bull appears on screen; gravity pulls it down without input
-- [ ] Tap makes Bull jump; repeated taps keep it airborne
-- [ ] Bull touching channel ceiling → death screen shows with score
-- [ ] Bull touching channel floor → death screen shows with score
-- [ ] Score increments every frame while alive; resets to 0 on new run
-- [ ] Full run cycle (start → play → die → restart) works without page refresh
-- [ ] Browser DevTools performance tab shows consistent ~60fps; no frame-time spikes above 20ms
+- [x] Bull appears on screen; gravity pulls it down without input
+- [x] Tap makes Bull jump; repeated taps keep it airborne
+- [x] Bull touching channel ceiling → death screen shows with score
+- [x] Bull touching channel floor → death screen shows with score
+- [x] Score increments every frame while alive; resets to 0 on new run
+- [x] Full run cycle (start → play → die → restart) works without page refresh
+- [x] Browser DevTools performance tab shows consistent ~60fps; no frame-time spikes above 20ms
 
 ---
 
