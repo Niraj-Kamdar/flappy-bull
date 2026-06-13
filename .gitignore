@@ -1,3 +1,9 @@
 .agents
 .claude
 skills-lock.json
+node_modules/
+app/node_modules/
+target/
+app/dist/
+.anchor/
+
