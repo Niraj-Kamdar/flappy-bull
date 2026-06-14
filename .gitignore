@@ -7,6 +7,6 @@ target/
 app/dist/
 .anchor/
 
-app/src/wasm/
-templates/
+# app/src/wasm/
+# templates/
 todo.md
