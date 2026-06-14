@@ -1,9 +1,9 @@
 import {
   SCALE,
   GRAVITY,
-  TAP_VEL,
+  TAP_BOOST,
+  MAX_UP_VEL,
   MAX_VEL_Y,
-  CHANNEL_HALF,
   BULL_RADIUS,
   CANVAS_H,
 } from "./constants";
@@ -16,6 +16,8 @@ export type GameState = {
   velY: number;
   score: number;
   channelCenter: number;
+  assist: "none" | "rocket" | "parachute";
+  assistTicks: number;
 };
 
 export function initState(canvasH: number): GameState {
@@ -25,32 +27,50 @@ export function initState(canvasH: number): GameState {
     velY: 0,
     score: 0,
     channelCenter: (canvasH / 2) * SCALE,
+    assist: "none",
+    assistTicks: 0,
   };
 }
 
+// Pure physics update — no pipe collision (handled per-pipe in GameCanvas)
 export function tick(s: GameState): GameState {
   if (s.phase !== "PLAYING") return s;
 
-  const velY = Math.min(s.velY + GRAVITY, MAX_VEL_Y);
-  const bullY = s.bullY + velY;
+  let velY = s.velY;
+  let assist = s.assist;
+  let assistTicks = s.assistTicks;
 
-  const ceilBound = (s.channelCenter / SCALE - CHANNEL_HALF + BULL_RADIUS) * SCALE;
-  const floorBound = (s.channelCenter / SCALE + CHANNEL_HALF - BULL_RADIUS) * SCALE;
-
-  if (bullY <= ceilBound || bullY >= floorBound) {
-    return { ...s, bullY, velY, phase: "DEAD" };
+  if (assist === "rocket") {
+    velY = Math.min(velY + (-GRAVITY / 2), MAX_VEL_Y);
+  } else if (assist === "parachute") {
+    velY = Math.round(velY * 0.88);
+    velY = Math.min(velY + GRAVITY, MAX_VEL_Y);
+  } else {
+    velY = Math.min(velY + GRAVITY, MAX_VEL_Y);
   }
 
-  return { ...s, bullY, velY, score: s.score + 1 };
+  if (assistTicks > 0) {
+    assistTicks--;
+    if (assistTicks === 0) assist = "none";
+  }
+
+  const bullY = s.bullY + velY;
+
+  // Canvas ceiling/floor death
+  if (bullY < BULL_RADIUS * SCALE || bullY > (CANVAS_H - BULL_RADIUS) * SCALE) {
+    return { ...s, bullY, velY, phase: "DEAD", assist: "none", assistTicks: 0 };
+  }
+
+  return { ...s, bullY, velY, assist, assistTicks };
 }
 
 export function applyTap(s: GameState, canvasH: number): GameState {
   if (s.phase === "IDLE") {
-    return { ...s, phase: "PLAYING", velY: TAP_VEL };
+    return { ...s, phase: "PLAYING", velY: -TAP_BOOST };
   }
   if (s.phase === "PLAYING") {
-    return { ...s, velY: TAP_VEL };
+    return { ...s, velY: Math.max(s.velY - TAP_BOOST, -MAX_UP_VEL) };
   }
-  // DEAD → restart
-  return initState(canvasH ?? CANVAS_H);
+  // DEAD → restart: preserve channelCenter so gap doesn't snap to midpoint
+  return { ...initState(canvasH ?? CANVAS_H), channelCenter: s.channelCenter };
 }

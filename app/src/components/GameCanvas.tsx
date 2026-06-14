@@ -5,14 +5,38 @@ import {
   CANVAS_H,
   BULL_X,
   BULL_RADIUS,
-  CHANNEL_HALF,
   SCALE,
   SCROLL_SPEED,
   GRID_SPACING,
+  PUMP_VEL_THRESHOLD,
+  DUMP_VEL_THRESHOLD,
+  ASSIST_TICKS,
+  COIN_SCORE,
+  CHANNEL_LERP_BASE,
+  CHANNEL_LERP_FAST,
+  PIPE_SPACING_MIN,
+  PIPE_SPACING_MAX,
+  PIPE_CENTER_STEP_BASE,
+  PIPE_CENTER_STEP_MAX,
+  EARLY_GAP_BONUS,
+  RAMP_SPACING_TIGHTEN,
+  RAMP_PIPES,
+  PIPE_WIDTH,
 } from "../game/constants";
 import { initState, tick, applyTap, GameState } from "../game/physics";
+import { usePriceChannel, PriceChannelState, VolatilityState } from "../hooks/usePriceChannel";
 
 type Props = { price: number | null };
+
+type Coin = { x: number; y: number; collected: boolean };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: number };
+type Pipe = { x: number; gapCenterY: number; gapHalf: number; scored: boolean; vol: VolatilityState };
+
+function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: number } {
+  if (vol === "SQUEEZE") return { body: 0x3a3000, cap: 0x5a4800, edge: 0xffaa00 };
+  if (vol === "BREAKOUT") return { body: 0x003a1a, cap: 0x005a2a, edge: 0x00ff88 };
+  return { body: 0x1a3a3a, cap: 0x2a5a5a, edge: 0x4488aa };
+}
 
 export function GameCanvas({ price }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -20,6 +44,24 @@ export function GameCanvas({ price }: Props) {
   const scrollOffsetRef = useRef(0);
   const priceRef = useRef<number | null>(price);
   priceRef.current = price;
+
+  const channelStateRef = useRef<PriceChannelState>({
+    targetCenterPx: CANVAS_H / 2,
+    channelHalf: 75,
+    pipeSpacing: PIPE_SPACING_MAX,
+    volatilityState: "NORMAL",
+    priceVelocity: 0,
+  });
+  const pipesPassedRef = useRef(0);
+  const liveChannelState = usePriceChannel(price);
+  channelStateRef.current = liveChannelState;
+
+  const pendingAssistRef = useRef<"rocket" | "parachute" | null>(null);
+  const prevVolStateRef = useRef<VolatilityState>("NORMAL");
+  const shakeTicksRef = useRef(0);
+  const pulseCounterRef = useRef(0);
+  const sirenFadeRef = useRef(0);
+  const prevPhaseRef = useRef<GameState["phase"]>("IDLE");
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -48,8 +90,14 @@ export function GameCanvas({ price }: Props) {
         const bgGraphics = new PIXI.Graphics();
         app.stage.addChild(bgGraphics);
 
-        const channelGraphics = new PIXI.Graphics();
-        app.stage.addChild(channelGraphics);
+        const pipeGraphics = new PIXI.Graphics();
+        app.stage.addChild(pipeGraphics);
+
+        const particleGfx = new PIXI.Graphics();
+        app.stage.addChild(particleGfx);
+
+        const coinGfx = new PIXI.Graphics();
+        app.stage.addChild(coinGfx);
 
         const bullGfx = new PIXI.Graphics();
         bullGfx.circle(0, 0, BULL_RADIUS);
@@ -73,6 +121,16 @@ export function GameCanvas({ price }: Props) {
         priceText.y = 10;
         app.stage.addChild(priceText);
 
+        const sirenText = new PIXI.Text({
+          text: "!! DUMP !!",
+          style: { fill: "#ff4444", fontSize: 28, fontFamily: "monospace", fontWeight: "bold" },
+        });
+        sirenText.anchor.set(0.5);
+        sirenText.x = CANVAS_W / 2;
+        sirenText.y = 60;
+        sirenText.visible = false;
+        app.stage.addChild(sirenText);
+
         const overlayContainer = new PIXI.Container();
         app.stage.addChild(overlayContainer);
 
@@ -83,12 +141,7 @@ export function GameCanvas({ price }: Props) {
 
         const overlayTitle = new PIXI.Text({
           text: "TAP TO FLY",
-          style: {
-            fill: "#ffffff",
-            fontSize: 36,
-            fontFamily: "monospace",
-            fontWeight: "bold",
-          },
+          style: { fill: "#ffffff", fontSize: 36, fontFamily: "monospace", fontWeight: "bold" },
         });
         overlayTitle.anchor.set(0.5);
         overlayTitle.x = CANVAS_W / 2;
@@ -104,10 +157,14 @@ export function GameCanvas({ price }: Props) {
         overlaySubtext.y = CANVAS_H / 2 + 30;
         overlayContainer.addChild(overlaySubtext);
 
-        function drawBg(scrollOffset: number) {
+        const coins: Coin[] = [];
+        const particles: Particle[] = [];
+        const pipes: Pipe[] = [];
+
+        function drawBg(scrollOffset: number, bgColor: number) {
           bgGraphics.clear();
           bgGraphics.rect(0, 0, CANVAS_W, CANVAS_H);
-          bgGraphics.fill({ color: 0x0a0a14 });
+          bgGraphics.fill({ color: bgColor });
           bgGraphics.setStrokeStyle({ width: 1, color: 0x1a1a2e });
           const startX = -(scrollOffset % GRID_SPACING);
           for (let x = startX; x < CANVAS_W; x += GRID_SPACING) {
@@ -117,21 +174,42 @@ export function GameCanvas({ price }: Props) {
           bgGraphics.stroke();
         }
 
-        function drawChannel(centerPx: number) {
-          channelGraphics.clear();
-          const ceilY = centerPx - CHANNEL_HALF;
-          const floorY = centerPx + CHANNEL_HALF;
+        function drawPipes(pipeList: Pipe[], pulse: number) {
+          pipeGraphics.clear();
+          for (const pipe of pipeList) {
+            const { body, cap, edge } = pipeColors(pipe.vol);
+            const gapTop = pipe.gapCenterY - pipe.gapHalf;
+            const gapBot = pipe.gapCenterY + pipe.gapHalf;
+            const capH = 12;
 
-          channelGraphics.rect(0, 0, CANVAS_W, ceilY);
-          channelGraphics.fill({ color: 0x1a0a0a });
+            // Top pipe
+            if (gapTop > capH) {
+              pipeGraphics.rect(pipe.x, 0, PIPE_WIDTH, gapTop - capH);
+              pipeGraphics.fill({ color: body });
+            }
+            pipeGraphics.rect(pipe.x - 4, gapTop - capH, PIPE_WIDTH + 8, capH);
+            pipeGraphics.fill({ color: cap });
 
-          channelGraphics.rect(0, floorY, CANVAS_W, CANVAS_H - floorY);
-          channelGraphics.fill({ color: 0x1a0a0a });
+            // Bottom pipe
+            pipeGraphics.rect(pipe.x - 4, gapBot, PIPE_WIDTH + 8, capH);
+            pipeGraphics.fill({ color: cap });
+            if (gapBot + capH < CANVAS_H) {
+              pipeGraphics.rect(pipe.x, gapBot + capH, PIPE_WIDTH, CANVAS_H - gapBot - capH);
+              pipeGraphics.fill({ color: body });
+            }
 
-          channelGraphics.rect(0, ceilY - 2, CANVAS_W, 4);
-          channelGraphics.fill({ color: 0xff2222, alpha: 0.7 });
-          channelGraphics.rect(0, floorY - 2, CANVAS_W, 4);
-          channelGraphics.fill({ color: 0xff2222, alpha: 0.7 });
+            // Edge glow on cap lips
+            const alpha = pipe.vol === "SQUEEZE"
+              ? 0.4 + 0.35 * Math.sin(pulse * 0.15)
+              : 0.75;
+            pipeGraphics.setStrokeStyle({ width: 2, color: edge, alpha });
+            pipeGraphics.moveTo(pipe.x - 4, gapTop - capH);
+            pipeGraphics.lineTo(pipe.x + PIPE_WIDTH + 4, gapTop - capH);
+            pipeGraphics.stroke();
+            pipeGraphics.moveTo(pipe.x - 4, gapBot + capH);
+            pipeGraphics.lineTo(pipe.x + PIPE_WIDTH + 4, gapBot + capH);
+            pipeGraphics.stroke();
+          }
         }
 
         const onTap = () => {
@@ -144,34 +222,201 @@ export function GameCanvas({ price }: Props) {
         window.addEventListener("keydown", onKey);
 
         app.ticker.add(() => {
-          stateRef.current = tick(stateRef.current);
-          scrollOffsetRef.current =
-            (scrollOffsetRef.current + SCROLL_SPEED) % GRID_SPACING;
-
+          const { targetCenterPx, channelHalf, pipeSpacing, volatilityState, priceVelocity } = channelStateRef.current;
+          const prevPhase = prevPhaseRef.current;
           const state = stateRef.current;
-          const bullYPx = state.bullY / SCALE;
-          const centerPx = state.channelCenter / SCALE;
 
-          drawBg(scrollOffsetRef.current);
-          drawChannel(centerPx);
+          // Restart: clear pipes/coins/particles
+          if (prevPhase === "DEAD" && state.phase === "IDLE") {
+            pipes.length = 0;
+            coins.length = 0;
+            particles.length = 0;
+            pipesPassedRef.current = 0;
+          }
 
-          bullGfx.y = bullYPx;
-          scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${state.score}`;
+          // Assist detection
+          if (state.phase === "PLAYING") {
+            if (priceVelocity >= PUMP_VEL_THRESHOLD && state.assist === "none" && pendingAssistRef.current === null) {
+              pendingAssistRef.current = "rocket";
+            }
+            if (priceVelocity <= DUMP_VEL_THRESHOLD && state.assist === "none" && pendingAssistRef.current === null) {
+              pendingAssistRef.current = "parachute";
+            }
+            if (pendingAssistRef.current && state.assist === "none") {
+              const assistType = pendingAssistRef.current;
+              stateRef.current = { ...state, assist: assistType, assistTicks: ASSIST_TICKS };
+              pendingAssistRef.current = null;
+              if (assistType === "rocket") {
+                const bullYPx = stateRef.current.bullY / SCALE;
+                for (let i = 0; i < 12; i++) {
+                  const angle = (i / 12) * Math.PI * 2;
+                  particles.push({ x: BULL_X, y: bullYPx, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4, life: 1.0, color: 0x00ff88 });
+                }
+              }
+              if (assistType === "parachute") {
+                sirenText.visible = true;
+                sirenFadeRef.current = 90;
+              }
+            }
+          }
 
+          // Channel center lerp (runs every phase so gap position tracks price even on IDLE)
+          const isFastMove = Math.abs(priceVelocity) >= PUMP_VEL_THRESHOLD;
+          const lerpSpeed = isFastMove ? CHANNEL_LERP_FAST : CHANNEL_LERP_BASE;
+          const currentCenter = stateRef.current.channelCenter;
+          const targetScaled = targetCenterPx * SCALE;
+          stateRef.current = {
+            ...stateRef.current,
+            channelCenter: Math.round(currentCenter + (targetScaled - currentCenter) * lerpSpeed),
+          };
+
+          // Physics tick (canvas ceiling/floor death only; pipe collision below)
+          stateRef.current = tick(stateRef.current);
+          scrollOffsetRef.current = (scrollOffsetRef.current + SCROLL_SPEED) % GRID_SPACING;
+
+          // Pipe spawning, scrolling, collision, score
+          if (stateRef.current.phase === "PLAYING") {
+            const centerPx = stateRef.current.channelCenter / SCALE;
+
+            // Spawn new pipe — bounded-step center, ramped gap/spacing
+            const rampT = Math.min(1, pipesPassedRef.current / RAMP_PIPES);
+            const stepCap = PIPE_CENTER_STEP_BASE + rampT * (PIPE_CENTER_STEP_MAX - PIPE_CENTER_STEP_BASE);
+            const effHalf = Math.round(channelHalf + (1 - rampT) * EARLY_GAP_BONUS);
+            const effSpacing = Math.max(PIPE_SPACING_MIN, pipeSpacing - rampT * RAMP_SPACING_TIGHTEN);
+            const lastPipe = pipes[pipes.length - 1];
+            if (!lastPipe || lastPipe.x < CANVAS_W - effSpacing) {
+              const baseCenter = lastPipe ? lastPipe.gapCenterY : centerPx;
+              const delta = Math.max(-stepCap, Math.min(stepCap, targetCenterPx - baseCenter));
+              const newCenter = Math.max(effHalf + 10, Math.min(CANVAS_H - effHalf - 10, baseCenter + delta));
+              pipes.push({ x: CANVAS_W + 10, gapCenterY: newCenter, gapHalf: effHalf, scored: false, vol: volatilityState });
+            }
+
+            const bullYPx = stateRef.current.bullY / SCALE;
+            let hitPipe = false;
+            for (const pipe of pipes) {
+              pipe.x -= SCROLL_SPEED;
+
+              if (
+                !hitPipe &&
+                pipe.x < BULL_X + BULL_RADIUS &&
+                pipe.x + PIPE_WIDTH > BULL_X - BULL_RADIUS
+              ) {
+                if (
+                  bullYPx - BULL_RADIUS < pipe.gapCenterY - pipe.gapHalf ||
+                  bullYPx + BULL_RADIUS > pipe.gapCenterY + pipe.gapHalf
+                ) {
+                  stateRef.current = { ...stateRef.current, phase: "DEAD", assist: "none", assistTicks: 0 };
+                  shakeTicksRef.current = 30;
+                  hitPipe = true;
+                }
+              }
+
+              if (!pipe.scored && pipe.x + PIPE_WIDTH < BULL_X) {
+                pipe.scored = true;
+                pipesPassedRef.current++;
+                stateRef.current = { ...stateRef.current, score: stateRef.current.score + 1 };
+              }
+            }
+            while (pipes.length && pipes[0].x + PIPE_WIDTH < -10) pipes.shift();
+
+            // Coin spawn on BREAKOUT transition
+            if (volatilityState === "BREAKOUT" && prevVolStateRef.current !== "BREAKOUT") {
+              for (let i = 0; i < 4; i++) {
+                const spread = (channelHalf - 20) * (2 * Math.random() - 1);
+                coins.push({ x: CANVAS_W + i * 90, y: centerPx + spread, collected: false });
+              }
+            }
+          }
+          prevVolStateRef.current = volatilityState;
+
+          // Coin scroll + collection
+          const bullYPxFinal = stateRef.current.bullY / SCALE;
+          for (const c of coins) {
+            if (c.collected) continue;
+            c.x -= SCROLL_SPEED;
+            if (
+              stateRef.current.phase === "PLAYING" &&
+              Math.abs(c.x - BULL_X) < BULL_RADIUS * 2 &&
+              Math.abs(c.y - bullYPxFinal) < BULL_RADIUS * 2
+            ) {
+              c.collected = true;
+              stateRef.current = { ...stateRef.current, score: stateRef.current.score + COIN_SCORE };
+            }
+          }
+          while (coins.length && coins[0].x < -20) coins.shift();
+
+          const finalState = stateRef.current;
+          const finalBullY = finalState.bullY / SCALE;
+
+          // Background tint by state
+          const bgColor =
+            finalState.assist === "parachute" ? 0x140004 :
+            finalState.assist === "rocket"    ? 0x04140a :
+            volatilityState === "SQUEEZE"     ? 0x0a0a18 : 0x0a0a14;
+
+          drawBg(scrollOffsetRef.current, bgColor);
+          pulseCounterRef.current++;
+          drawPipes(pipes, pulseCounterRef.current);
+
+          // Particles
+          for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.x += p.vx; p.y += p.vy; p.life -= 1 / 30;
+            if (p.life <= 0) { particles.splice(i, 1); continue; }
+          }
+          particleGfx.clear();
+          for (const p of particles) {
+            particleGfx.circle(p.x, p.y, 3 * p.life);
+            particleGfx.fill({ color: p.color, alpha: p.life });
+          }
+
+          // Coins render
+          coinGfx.clear();
+          for (const c of coins) {
+            if (c.collected) continue;
+            const r = 8;
+            coinGfx.poly([c.x, c.y - r, c.x + r, c.y, c.x, c.y + r, c.x - r, c.y]);
+            coinGfx.fill({ color: 0xffcc00 });
+          }
+
+          bullGfx.y = finalBullY;
+          scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${finalState.score}`;
           const p = priceRef.current;
           priceText.text = p !== null ? `SOL: $${p.toFixed(2)}` : "SOL: --";
 
-          if (state.phase === "IDLE") {
+          // Siren fade
+          if (sirenFadeRef.current > 0) {
+            sirenText.alpha = Math.min(1, sirenFadeRef.current / 20);
+            sirenFadeRef.current--;
+          } else {
+            sirenText.visible = false;
+          }
+
+          // Screen shake
+          if (shakeTicksRef.current > 0) {
+            const intensity = 6 * (shakeTicksRef.current / 30);
+            app.stage.x = (Math.random() - 0.5) * 2 * intensity;
+            app.stage.y = (Math.random() - 0.5) * 2 * intensity;
+            shakeTicksRef.current--;
+          } else {
+            app.stage.x = 0;
+            app.stage.y = 0;
+          }
+
+          // Overlays
+          if (finalState.phase === "IDLE") {
             overlayContainer.visible = true;
             overlayTitle.text = "TAP TO FLY";
             overlaySubtext.text = "";
-          } else if (state.phase === "DEAD") {
+          } else if (finalState.phase === "DEAD") {
             overlayContainer.visible = true;
             overlayTitle.text = "LIQUIDATED";
-            overlaySubtext.text = `Score: ${state.score}   |   TAP TO RESTART`;
+            overlaySubtext.text = `Score: ${finalState.score}   |   TAP TO RESTART`;
           } else {
             overlayContainer.visible = false;
           }
+
+          prevPhaseRef.current = finalState.phase;
         });
 
         return () => {
