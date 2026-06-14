@@ -8,6 +8,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 wasm = ["wasm-bindgen"]
+native = []
 
 [dependencies]
 wasm-bindgen = { version = "0.2", optional = true }
@@ -15,6 +16,11 @@ wasm-bindgen = { version = "0.2", optional = true }
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+wasm-bindgen-test = "0.3"
+
+[[bin]]
+name = "gen_golden"
+required-features = ["native"]
 
 [profile.release]
 opt-level = "s"

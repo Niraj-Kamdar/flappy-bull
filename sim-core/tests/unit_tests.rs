@@ -28,6 +28,7 @@ fn gravity_no_tap() {
         score: 0,
         price,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     for i in 1..=10u32 {
         s = step(s, &c, false, price);
@@ -93,6 +94,7 @@ fn floor_death_exact() {
         score: 0,
         price: 17_612_345,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let next = step(s, &c, false, 0);
     assert!(!is_alive(next.flags), "should be dead at floor");
@@ -114,6 +116,7 @@ fn ceiling_death_exact() {
         score: 0,
         price: 17_612_345,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let next = step(s, &c, false, 0);
     assert!(!is_alive(next.flags), "should be dead at ceiling");
@@ -131,6 +134,7 @@ fn dead_state_immutable() {
         score: 3,
         price: 17_612_345,
         flags: 0, // dead
+        ..Default::default()
     };
     let next = step(s, &c, true, 99_999);
     assert_eq!(next, s, "dead state must be unchanged");
@@ -162,6 +166,7 @@ fn score_no_increment_on_death() {
         score: 7,
         price: 17_612_345,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let next = step(s, &c, false, 0);
     assert!(!is_alive(next.flags));
@@ -181,6 +186,7 @@ fn tap_death_same_tick() {
         score: 0,
         price: 17_612_345,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     // Tap: vel = -max_up_vel - tap_boost → clamped to -max_up_vel
     // Gravity: vel = -max_up_vel + gravity = -900 + 32 = -868 (still strongly upward)
@@ -217,6 +223,7 @@ fn channel_lerp_exact() {
         score: 0,
         price,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let next = step(s, &c, false, price); // same price_sample → price_vel = 0
     assert_eq!(next.channel_center, expected_center);
@@ -241,6 +248,7 @@ fn price_to_center_modulo() {
         score: 0,
         price,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let next = step(s, &c, false, price);
     let expected_delta = (0i64 - mid as i64) * c.lerp_num_base as i64 / c.lerp_den as i64;
@@ -263,6 +271,7 @@ fn modulo_negative_price() {
         score: 0,
         price,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
 
     let next_pos = step(make(pos_price), &c, false, pos_price);
@@ -287,6 +296,7 @@ fn state_hash_deterministic() {
         score: 10,
         price: 17_612_345,
         flags: FLAG_ALIVE,
+        ..Default::default()
     };
     let h1 = state_hash(&s);
     let h2 = state_hash(&s);

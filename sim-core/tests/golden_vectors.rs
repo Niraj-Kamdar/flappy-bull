@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use sim_core::{SeasonConfig, SimState, FLAG_ALIVE, is_alive, state_hash, step};
+use sim_core::{SeasonConfig, SimState, is_alive, state_hash, step};
 
 #[derive(Deserialize)]
 struct JsonCfg {
@@ -65,6 +65,7 @@ fn make_cfg(j: &JsonCfg) -> SeasonConfig {
         lerp_num_base: j.lerp_num_base, lerp_den: j.lerp_den, lerp_num_fast: j.lerp_num_fast,
         price_vel_fast_thresh: j.price_vel_fast_thresh, price_frac_scale: j.price_frac_scale,
         season: j.season, _pad: [0; 3],
+        ..SeasonConfig::default()
     }
 }
 
@@ -72,6 +73,7 @@ fn make_state(j: &JsonState) -> SimState {
     SimState {
         bull_y: j.bull_y, vel_y: j.vel_y, channel_center: j.channel_center,
         tick: j.tick, score: j.score, price: j.price, flags: j.flags,
+        ..Default::default()
     }
 }
 

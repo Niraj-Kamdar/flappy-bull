@@ -11,14 +11,7 @@ import {
   PUMP_VEL_THRESHOLD,
   DUMP_VEL_THRESHOLD,
   ASSIST_TICKS,
-  COIN_SCORE,
-  PIPE_SPACING_MIN,
   PIPE_SPACING_MAX,
-  PIPE_CENTER_STEP_BASE,
-  PIPE_CENTER_STEP_MAX,
-  EARLY_GAP_BONUS,
-  RAMP_SPACING_TIGHTEN,
-  RAMP_PIPES,
   PIPE_WIDTH,
 } from "../game/constants";
 import { initState, applyTap, GameState } from "../game/physics";
@@ -26,7 +19,7 @@ import {
   initSimCore,
   wasm_step,
   wasm_init_state,
-  wasm_default_config,
+  getSimConfig,
   WasmSimState,
   WasmSeasonConfig,
   isAlive,
@@ -39,7 +32,10 @@ type Props = { price: number | null };
 
 type Coin = { x: number; y: number; collected: boolean };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: number };
-type Pipe = { x: number; gapCenterY: number; gapHalf: number; scored: boolean; vol: VolatilityState };
+// Render-only pipe, derived each tick from the authoritative wasm sim state.
+type Pipe = { x: number; gapCenterY: number; gapHalf: number; vol: VolatilityState };
+
+const EMPTY_PIPE = -2147483648; // i32::MIN sentinel from sim-core
 
 function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: number } {
   if (vol === "SQUEEZE") return { body: 0x3a3000, cap: 0x5a4800, edge: 0xffaa00 };
@@ -68,7 +64,6 @@ export function GameCanvas({ price }: Props) {
     volatilityState: "NORMAL",
     priceVelocity: 0,
   });
-  const pipesPassedRef = useRef(0);
   const liveChannelState = usePriceChannel(price);
   channelStateRef.current = liveChannelState;
 
@@ -83,12 +78,11 @@ export function GameCanvas({ price }: Props) {
   // Init wasm on mount
   useEffect(() => {
     initSimCore().then(() => {
-      const cfg = wasm_default_config();
-      wasmCfgRef.current = cfg;
+      wasmCfgRef.current = getSimConfig();
       const mid = (CANVAS_H / 2) * SCALE;
       wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
       wasmReadyRef.current = true;
-    });
+    }).catch((e) => console.error("[DBG] wasm init FAILED", e));
   }, []);
 
   useEffect(() => {
@@ -187,7 +181,19 @@ export function GameCanvas({ price }: Props) {
 
         const coins: Coin[] = [];
         const particles: Particle[] = [];
-        const pipes: Pipe[] = [];
+
+        // Derive the on-screen pipes straight from the authoritative wasm state,
+        // so what is drawn is exactly what the sim collides against.
+        function wasmPipes(ws: WasmSimState, gapHalfPx: number, vol: VolatilityState): Pipe[] {
+          const xs = [ws.pipe0_x, ws.pipe1_x, ws.pipe2_x, ws.pipe3_x];
+          const gaps = [ws.pipe0_gap, ws.pipe1_gap, ws.pipe2_gap, ws.pipe3_gap];
+          const out: Pipe[] = [];
+          for (let i = 0; i < 4; i++) {
+            if (xs[i] === EMPTY_PIPE) continue;
+            out.push({ x: xs[i] / SCALE, gapCenterY: gaps[i] / SCALE, gapHalf: gapHalfPx, vol });
+          }
+          return out;
+        }
 
         function drawBg(scrollOffset: number, bgColor: number) {
           bgGraphics.clear();
@@ -240,6 +246,7 @@ export function GameCanvas({ price }: Props) {
           // Drain into TS state for phase transitions (IDLE→PLAYING, DEAD→IDLE)
           const prev = tsStateRef.current;
           tsStateRef.current = applyTap(tsStateRef.current, CANVAS_H);
+          console.log("[DBG] tap:", prev.phase, "->", tsStateRef.current.phase, "wasmReady=", wasmReadyRef.current);
 
           if (prev.phase === "DEAD" && tsStateRef.current.phase === "IDLE") {
             // Restart: reset wasm state
@@ -270,17 +277,18 @@ export function GameCanvas({ price }: Props) {
         };
         window.addEventListener("keydown", onKey);
 
+        let dbgFrame = 0;
+        let dbgErrored = false;
         app.ticker.add(() => {
-          const { channelHalf, pipeSpacing, volatilityState, priceVelocity } = channelStateRef.current;
+         try {
+          const { channelHalf, volatilityState, priceVelocity } = channelStateRef.current;
           const tsPhase = tsStateRef.current.phase;
           const assist = tsStateRef.current.assist;
 
           // On restart (DEAD→IDLE), clear cosmetics
           if (prevWasDeadRef.current && tsPhase === "IDLE") {
-            pipes.length = 0;
             coins.length = 0;
             particles.length = 0;
-            pipesPassedRef.current = 0;
           }
 
           // Drain pending tap flag
@@ -297,10 +305,14 @@ export function GameCanvas({ price }: Props) {
             const p = priceRef.current;
             const pLo = p != null ? priceToLo(p) : 0;
             const pHi = p != null ? priceToHi(p) : 0;
-            wasmStateRef.current = wasm_step(
-              wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi
-            );
+            if (dbgFrame < 3) console.log("[DBG] pre-step f=", dbgFrame, "p=", p, "pLo=", pLo, "pHi=", pHi, "tap=", tap);
+            wasm_step(wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi);
             const ws = wasmStateRef.current;
+            if (dbgFrame < 3) console.log("[DBG] post-step f=", dbgFrame, "bull_y=", ws.bull_y, "flags=", ws.flags, "score=", ws.score, "p0x=", ws.pipe0_x, "p0gap=", ws.pipe0_gap);
+            if (dbgFrame % 60 === 0) console.log("[DBG] tick=", ws.tick, "p=", p, "pLo=", pLo, "center=", ws.channel_center,
+              "gaps=", ws.pipe0_gap, ws.pipe1_gap, ws.pipe2_gap, ws.pipe3_gap,
+              "xs=", ws.pipe0_x, ws.pipe1_x, ws.pipe2_x, ws.pipe3_x);
+            dbgFrame++;
             bullYPx = ws.bull_y / SCALE;
             channelCenterPx = ws.channel_center / SCALE;
             wasmScore = ws.score;
@@ -308,6 +320,10 @@ export function GameCanvas({ price }: Props) {
 
             // Propagate death to TS phase
             if (!wasmAlive && tsPhase === "PLAYING") {
+              const ceil = wasmCfgRef.current.bull_radius_px * wasmCfgRef.current.scale;
+              const floor = (wasmCfgRef.current.canvas_h_px - wasmCfgRef.current.bull_radius_px) * wasmCfgRef.current.scale;
+              console.log("[DBG] DEATH tick=", ws.tick, "bull_y=", ws.bull_y, "ceil=", ceil, "floor=", floor,
+                "p0x=", ws.pipe0_x, "p1x=", ws.pipe1_x, "p2x=", ws.pipe2_x, "p3x=", ws.pipe3_x, "tapThisFrame=", tap);
               tsStateRef.current = { ...tsStateRef.current, phase: "DEAD" };
               shakeTicksRef.current = 30;
             }
@@ -353,31 +369,8 @@ export function GameCanvas({ price }: Props) {
             }
           }
 
-          // ── Cosmetic pipe spawning / collision visuals ──────────────────
+          // ── Cosmetic coin spawn on BREAKOUT (visual only; score from wasm) ──
           if (tsPhase === "PLAYING") {
-            const rampT = Math.min(1, pipesPassedRef.current / RAMP_PIPES);
-            const stepCap = PIPE_CENTER_STEP_BASE + rampT * (PIPE_CENTER_STEP_MAX - PIPE_CENTER_STEP_BASE);
-            const effHalf = Math.round(channelHalf + (1 - rampT) * EARLY_GAP_BONUS);
-            const effSpacing = Math.max(PIPE_SPACING_MIN, pipeSpacing - rampT * RAMP_SPACING_TIGHTEN);
-            const lastPipe = pipes[pipes.length - 1];
-
-            if (!lastPipe || lastPipe.x < CANVAS_W - effSpacing) {
-              const baseCenter = lastPipe ? lastPipe.gapCenterY : channelCenterPx;
-              const delta = Math.max(-stepCap, Math.min(stepCap, channelCenterPx - baseCenter));
-              const newCenter = Math.max(effHalf + 10, Math.min(CANVAS_H - effHalf - 10, baseCenter + delta));
-              pipes.push({ x: CANVAS_W + 10, gapCenterY: newCenter, gapHalf: effHalf, scored: false, vol: volatilityState });
-            }
-
-            for (const pipe of pipes) {
-              pipe.x -= SCROLL_SPEED;
-              if (!pipe.scored && pipe.x + PIPE_WIDTH < BULL_X) {
-                pipe.scored = true;
-                pipesPassedRef.current++;
-              }
-            }
-            while (pipes.length && pipes[0].x + PIPE_WIDTH < -10) pipes.shift();
-
-            // Coin spawn on BREAKOUT transition
             if (volatilityState === "BREAKOUT" && prevVolStateRef.current !== "BREAKOUT") {
               for (let i = 0; i < 4; i++) {
                 const spread = (channelHalf - 20) * (2 * Math.random() - 1);
@@ -410,7 +403,11 @@ export function GameCanvas({ price }: Props) {
 
           drawBg(scrollOffsetRef.current, bgColor);
           pulseCounterRef.current++;
-          drawPipes(pipes, pulseCounterRef.current);
+          const renderPipes =
+            wasmStateRef.current && wasmCfgRef.current
+              ? wasmPipes(wasmStateRef.current, wasmCfgRef.current.channel_half_min, volatilityState)
+              : [];
+          drawPipes(renderPipes, pulseCounterRef.current);
 
           for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
@@ -466,6 +463,10 @@ export function GameCanvas({ price }: Props) {
           } else {
             overlayContainer.visible = false;
           }
+         } catch (err) {
+           if (!dbgErrored) { dbgErrored = true; console.error("[DBG] TICKER THREW (loop now dead):", err); }
+           throw err;
+         }
         });
 
         return () => {

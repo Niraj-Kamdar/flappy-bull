@@ -16,7 +16,7 @@
       "taps": [0, 3, 6],
       "price_samples": [{"tick": 0, "price": 200000}],
       "steps": 10,
-      "expected": { "channel_center": 42554, "score": 10, "alive": true, "state_hash": 972858159 }
+      "expected": { "channel_center": 42554, "score": 10, "alive": true, "state_hash": 866770378 }
     },
     {
       "label": "frac_max",
@@ -27,7 +27,7 @@
       "taps": [0, 3, 6],
       "price_samples": [{"tick": 0, "price": 199999}],
       "steps": 10,
-      "expected": { "channel_center": 75765, "score": 4, "alive": false, "state_hash": 2927092737 }
+      "expected": { "channel_center": 85360, "score": 10, "alive": true, "state_hash": 1244828790 }
     }
   ]
 }

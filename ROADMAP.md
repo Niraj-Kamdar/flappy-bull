@@ -124,10 +124,33 @@ Delivered as four ordered sub-phases (de-risk earliest; 3c is spike-gated).
 - Golden-vector regression suite: JSON `{season_config,start_state,taps,price_samples,expected:{score,bullY,velY,alive,state_hash}}` run against both builds.
 
 #### UAT
-- [ ] `sbf` and `wasm32` builds of `sim-core` produce identical score + `state_hash` on golden + 10k fuzz vectors (incl. boundaries: velocity clamp, tap+death same tick, modulo wrap, longest run)
-- [ ] A deliberately-introduced `usize` or float fails the determinism lint/test
-- [ ] Game still plays and feels the same in-browser using the wasm predictor
-- [ ] No float / `Math.random` / unrounded division reachable from the scored core
+- [ ] `sbf` and `wasm32` builds of `sim-core` produce identical score + `state_hash` on golden + 10k fuzz vectors (incl. boundaries: velocity clamp, tap+death same tick, modulo wrap, longest run) — **partial:** native↔wasm32 proven for **1** baked scenario (`tests/wasm_identity.rs`); golden suite (6) runs native-only; **sbf hash never tested**; no fuzz
+- [ ] A deliberately-introduced `usize` or float fails the determinism lint/test — **partial:** `#![deny(clippy::float_arithmetic, clippy::cast_precision_loss)]` in place (compile-time hard error), but no committed negative/compile-fail test proving it
+- [x] Game still plays and feels the same in-browser using the wasm predictor — wasm `step()` is authoritative for score/position/death/channel; scored math removed from TS (now cosmetic). *Caveat:* rendered pipes spawn from a separate TS sequence, not the wasm collision channel — see plan item P6.
+- [x] No float / `Math.random` / unrounded division reachable from the scored core — scored core is integer-only Rust; `Math.random` confined to particles/coins (cosmetic)
+
+#### Status — 2026-06-14 (NOT complete; do not start 3b yet)
+
+**Done**
+- `sim-core` crate: pure `step()`, 32-byte `repr(C)` scalar `SimState`, `i64` price, integer lerp / modulo gap / truncate-toward-zero division / strict `<` death boundary; no `usize`, no float in src.
+- Three-target build verified: native (`cargo test` — 14 unit + 6 golden + 1 identity), `wasm32` (`wasm-pack build` → `app/src/wasm/sim-core/`), `sbf` (`anchor build` → `.so`). See `sim-core/README.md`.
+- Client integration: `vite-plugin-wasm` + top-level-await; 60 fps loop calls `wasm_step`; `physics.ts`/`usePriceChannel.ts` demoted to cosmetic.
+- `clippy -D warnings` clean; golden-vector regression suite (6 JSON fixtures).
+
+**Missing (blocks 3a sign-off)**
+1. **SBF determinism untested (biggest gap).** `programs/flappy-bull` *links* `sim-core` but never calls `step`/`state_hash` — the "program = replay authority, identical to client" claim has zero sbf-side test coverage. This is the whole point of 3a.
+2. **Cross-build identity is one scenario.** `wasm_identity.rs` checks a single hand-written run; the 6 golden vectors run native-only. wasm32 (and sbf) should reproduce all golden `state_hash`es.
+3. **No fuzz.** `sim-core/fuzz/` is an empty scaffold — the "10k fuzz vectors incl. boundaries" UAT is unmet.
+4. **`#![no_std]` not applied.** Roadmap specs `sim-core` as `#![no_std]`; crate is currently `std`. Tighten the determinism surface before more code lands on it.
+5. **No negative determinism test.** Lints exist but nothing proves a stray float/`usize` is actually rejected in CI.
+
+**Plan before 3b (ordered — de-risk the foundation first)**
+- **P1** — Add `#![no_std]` to `sim-core`; remove any `std` reliance; reconfirm native + `wasm32` + `sbf` build and all tests pass.
+- **P2** — *(highest value)* SBF determinism test: exercise `sim_core::step` on-chain (test-only ix or unit test under LiteSVM/`anchor test`), compute `state_hash` over the golden scenarios, assert equality with the native values. Closes gap #1.
+- **P3** — Promote golden vectors to cross-build: run all 6 through `wasm32` (e.g. `wasm_bindgen_test` over the fixtures) and assert `score` + `state_hash`, not just the one baked scenario.
+- **P4** — Implement `sim-core/fuzz/`: seeded generator over (config tweaks, tap stream, price stream) incl. boundaries (velocity clamp, tap+death same tick, modulo wrap, longest run); assert native == wasm32 (capture vectors for sbf replay). Target ≥10k.
+- **P5** — Negative test: `trybuild` compile-fail (or CI grep) proving a float/`usize` in the scored path is rejected.
+- **P6** — *(visual, optional for sign-off)* Decide rendered-pipe vs wasm-collision-channel alignment: either drive pipe gaps from `channel_center`/`channel_half_min`, or formally accept the divergence as cosmetic and document it.
 
 ---
 

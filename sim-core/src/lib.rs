@@ -4,17 +4,40 @@
 mod flags;
 pub use flags::{FLAG_ALIVE, is_alive, set_dead};
 
-/// Fixed-point sim state — 32 bytes, Copy, repr(C)
+/// Number of pipe slots tracked in state (enough to cover the canvas at min spacing).
+pub const MAX_PIPES: usize = 4;
+/// Sentinel marking an empty pipe slot.
+pub const EMPTY_PIPE: i32 = i32::MIN;
+
+/// Fixed-point sim state — Copy, repr(C). Scalars + a fixed ring of pipes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct SimState {
     pub bull_y: i32,         // pixels * SCALE (256 units/px)
     pub vel_y: i32,          // units/tick; negative = up
-    pub channel_center: i32, // fixed-point channel center
+    pub channel_center: i32, // fixed-point channel center (pipe gap target)
     pub tick: u32,
     pub score: u32,
     pub price: i64,          // price * PRICE_FRAC_SCALE (100_000)
     pub flags: u32,          // bit 0 = alive
+    pub pipe_x: [i32; MAX_PIPES],   // pipe left edge, px*scale; EMPTY_PIPE = empty slot
+    pub pipe_gap: [i32; MAX_PIPES], // pipe gap center, px*scale; locked at spawn
+}
+
+impl Default for SimState {
+    fn default() -> Self {
+        SimState {
+            bull_y: 0,
+            vel_y: 0,
+            channel_center: 0,
+            tick: 0,
+            score: 0,
+            price: 0,
+            flags: 0,
+            pipe_x: [EMPTY_PIPE; MAX_PIPES],
+            pipe_gap: [0; MAX_PIPES],
+        }
+    }
 }
 
 /// All physics params — no floats
@@ -32,6 +55,11 @@ pub struct SeasonConfig {
     pub lerp_num_base: i32,
     pub lerp_den: i32,
     pub lerp_num_fast: i32,
+    pub canvas_w_px: i32,
+    pub bull_x_px: i32,
+    pub pipe_width_px: i32,
+    pub pipe_scroll: i32,    // px*scale moved left per tick
+    pub pipe_spacing_px: i32,
     pub price_vel_fast_thresh: i64,
     pub price_frac_scale: i64,
     pub season: u8,
@@ -52,8 +80,16 @@ impl Default for SeasonConfig {
             lerp_num_base: 4,
             lerp_den: 100,
             lerp_num_fast: 10,
+            canvas_w_px: 800,
+            bull_x_px: 180,
+            pipe_width_px: 52,
+            pipe_scroll: 512, // 2 px/tick * 256 scale
+            pipe_spacing_px: 300,
             price_vel_fast_thresh: 8000,
-            price_frac_scale: 100_000,
+            // Small band: SOL cents are flat over a run; only sub-cent decimals
+            // move. % 100 maps decimals 4-5 across full channel so tiny price
+            // moves give pseudo-random pipe heights instead of frozen gaps.
+            price_frac_scale: 100,
             season: 1,
             _pad: [0; 3],
         }
@@ -111,14 +147,62 @@ pub fn step(s: SimState, cfg: &SeasonConfig, tap: bool, price_sample: i64) -> Si
             score: s.score,
             price,
             flags: set_dead(s.flags),
+            pipe_x: s.pipe_x,
+            pipe_gap: s.pipe_gap,
         };
     }
 
-    // 7. Channel collision (gap = channel_center ± channel_half_min * scale)
+    // 7. Pipes: scroll + recycle, spawn on spacing, collide.
+    let pipe_w = cfg.pipe_width_px * cfg.scale;
+    let spawn_x = cfg.canvas_w_px * cfg.scale;
+    let spawn_gate = spawn_x - cfg.pipe_spacing_px * cfg.scale;
+    let bull_left = (cfg.bull_x_px - cfg.bull_radius_px) * cfg.scale;
+    let bull_right = (cfg.bull_x_px + cfg.bull_radius_px) * cfg.scale;
     let gap_half = cfg.channel_half_min * cfg.scale;
     let bull_top = bull_y - cfg.bull_radius_px * cfg.scale;
     let bull_bot = bull_y + cfg.bull_radius_px * cfg.scale;
-    if bull_top < channel_center - gap_half || bull_bot > channel_center + gap_half {
+
+    let mut pipe_x = s.pipe_x;
+    let mut pipe_gap = s.pipe_gap;
+
+    // Scroll live pipes left; recycle off-screen; track rightmost still on field.
+    let mut rightmost = i32::MIN;
+    for x in pipe_x.iter_mut() {
+        if *x != EMPTY_PIPE {
+            *x -= cfg.pipe_scroll;
+            if *x + pipe_w < 0 {
+                *x = EMPTY_PIPE;
+            } else if *x > rightmost {
+                rightmost = *x;
+            }
+        }
+    }
+
+    // Spawn a new pipe when the field is empty or the lead pipe cleared the spacing.
+    if rightmost == i32::MIN || rightmost <= spawn_gate {
+        for (x, g) in pipe_x.iter_mut().zip(pipe_gap.iter_mut()) {
+            if *x == EMPTY_PIPE {
+                *x = spawn_x;
+                *g = channel_center;
+                break;
+            }
+        }
+    }
+
+    // Collision: any live pipe overlapping the bull column with bull outside its gap.
+    let mut dead = false;
+    for (x, g) in pipe_x.iter().zip(pipe_gap.iter()) {
+        if *x == EMPTY_PIPE {
+            continue;
+        }
+        let x_overlap = *x <= bull_right && *x + pipe_w >= bull_left;
+        if x_overlap && (bull_top < *g - gap_half || bull_bot > *g + gap_half) {
+            dead = true;
+            break;
+        }
+    }
+
+    if dead {
         return SimState {
             bull_y,
             vel_y,
@@ -127,6 +211,8 @@ pub fn step(s: SimState, cfg: &SeasonConfig, tap: bool, price_sample: i64) -> Si
             score: s.score,
             price,
             flags: set_dead(s.flags),
+            pipe_x,
+            pipe_gap,
         };
     }
 
@@ -139,6 +225,8 @@ pub fn step(s: SimState, cfg: &SeasonConfig, tap: bool, price_sample: i64) -> Si
         score: s.score + 1,
         price,
         flags: s.flags | FLAG_ALIVE,
+        pipe_x,
+        pipe_gap,
     }
 }
 
@@ -160,6 +248,12 @@ pub fn state_hash(s: &SimState) -> u64 {
     mix(&s.score.to_le_bytes());
     mix(&s.price.to_le_bytes());
     mix(&s.flags.to_le_bytes());
+    for x in &s.pipe_x {
+        mix(&x.to_le_bytes());
+    }
+    for g in &s.pipe_gap {
+        mix(&g.to_le_bytes());
+    }
     h
 }
 
@@ -173,6 +267,8 @@ pub fn init_state(bull_y: i32, channel_center: i32, price: i64) -> SimState {
         score: 0,
         price,
         flags: FLAG_ALIVE,
+        pipe_x: [EMPTY_PIPE; MAX_PIPES],
+        pipe_gap: [0; MAX_PIPES],
     }
 }
 
@@ -194,6 +290,14 @@ mod wasm_bindings {
         pub price_hi: i32,
         pub flags: u32,
         pub state_hash: u32,
+        pub pipe0_x: i32,
+        pub pipe1_x: i32,
+        pub pipe2_x: i32,
+        pub pipe3_x: i32,
+        pub pipe0_gap: i32,
+        pub pipe1_gap: i32,
+        pub pipe2_gap: i32,
+        pub pipe3_gap: i32,
     }
 
     fn from_sim(s: SimState) -> WasmSimState {
@@ -208,6 +312,14 @@ mod wasm_bindings {
             price_hi: (s.price >> 32) as i32,
             flags: s.flags,
             state_hash: h as u32,
+            pipe0_x: s.pipe_x[0],
+            pipe1_x: s.pipe_x[1],
+            pipe2_x: s.pipe_x[2],
+            pipe3_x: s.pipe_x[3],
+            pipe0_gap: s.pipe_gap[0],
+            pipe1_gap: s.pipe_gap[1],
+            pipe2_gap: s.pipe_gap[2],
+            pipe3_gap: s.pipe_gap[3],
         }
     }
 
@@ -221,6 +333,8 @@ mod wasm_bindings {
             score: w.score,
             price,
             flags: w.flags,
+            pipe_x: [w.pipe0_x, w.pipe1_x, w.pipe2_x, w.pipe3_x],
+            pipe_gap: [w.pipe0_gap, w.pipe1_gap, w.pipe2_gap, w.pipe3_gap],
         }
     }
 
@@ -239,6 +353,11 @@ mod wasm_bindings {
         pub lerp_num_base: i32,
         pub lerp_den: i32,
         pub lerp_num_fast: i32,
+        pub canvas_w_px: i32,
+        pub bull_x_px: i32,
+        pub pipe_width_px: i32,
+        pub pipe_scroll: i32,
+        pub pipe_spacing_px: i32,
         pub price_vel_fast_thresh_lo: u32,
         pub price_vel_fast_thresh_hi: i32,
         pub price_frac_scale_lo: u32,
@@ -259,6 +378,11 @@ mod wasm_bindings {
             lerp_num_base: w.lerp_num_base,
             lerp_den: w.lerp_den,
             lerp_num_fast: w.lerp_num_fast,
+            canvas_w_px: w.canvas_w_px,
+            bull_x_px: w.bull_x_px,
+            pipe_width_px: w.pipe_width_px,
+            pipe_scroll: w.pipe_scroll,
+            pipe_spacing_px: w.pipe_spacing_px,
             price_vel_fast_thresh: ((w.price_vel_fast_thresh_hi as i64) << 32)
                 | (w.price_vel_fast_thresh_lo as i64),
             price_frac_scale: ((w.price_frac_scale_hi as i64) << 32)
@@ -270,16 +394,16 @@ mod wasm_bindings {
 
     #[wasm_bindgen]
     pub fn wasm_step(
-        state: WasmSimState,
-        cfg: WasmSeasonConfig,
+        state: &mut WasmSimState,
+        cfg: &WasmSeasonConfig,
         tap: bool,
         price_lo: u32,
         price_hi: i32,
-    ) -> WasmSimState {
-        let s = to_sim(&state);
-        let c = cfg_from_wasm(&cfg);
+    ) {
+        let s = to_sim(state);
+        let c = cfg_from_wasm(cfg);
         let price_sample = ((price_hi as i64) << 32) | (price_lo as i64);
-        from_sim(step(s, &c, tap, price_sample))
+        *state = from_sim(step(s, &c, tap, price_sample));
     }
 
     #[wasm_bindgen]
@@ -308,6 +432,11 @@ mod wasm_bindings {
             lerp_num_base: cfg.lerp_num_base,
             lerp_den: cfg.lerp_den,
             lerp_num_fast: cfg.lerp_num_fast,
+            canvas_w_px: cfg.canvas_w_px,
+            bull_x_px: cfg.bull_x_px,
+            pipe_width_px: cfg.pipe_width_px,
+            pipe_scroll: cfg.pipe_scroll,
+            pipe_spacing_px: cfg.pipe_spacing_px,
             price_vel_fast_thresh_lo: (cfg.price_vel_fast_thresh & 0xFFFF_FFFF) as u32,
             price_vel_fast_thresh_hi: (cfg.price_vel_fast_thresh >> 32) as i32,
             price_frac_scale_lo: (cfg.price_frac_scale & 0xFFFF_FFFF) as u32,

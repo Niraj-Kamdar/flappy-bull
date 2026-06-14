@@ -8,3 +8,5 @@ app/dist/
 .anchor/
 
 app/src/wasm/
+templates/
+todo.md
