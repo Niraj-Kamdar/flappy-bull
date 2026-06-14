@@ -2,13 +2,15 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
-import { fileURLToPath } from "url";
-import path from "path";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { nodePolyfills } from "vite-plugin-node-polyfills";
 
 export default defineConfig({
-  plugins: [wasm(), topLevelAwait(), react()],
+  plugins: [
+    wasm(),
+    topLevelAwait(),
+    react(),
+    nodePolyfills(),
+  ],
   define: {
     "process.env": "{}",
     global: "globalThis",
@@ -24,7 +26,6 @@ export default defineConfig({
       define: {
         global: "globalThis",
       },
-      inject: [path.resolve(__dirname, "src/buffer-inject.js")],
     },
   },
 });
