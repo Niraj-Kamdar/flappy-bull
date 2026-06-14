@@ -1,9 +1,12 @@
-import { Buffer } from "buffer";
-window.Buffer = Buffer;
+// import { Buffer } from "buffer";
+// window.Buffer = Buffer;
 
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ConnectionProvider, WalletProvider } from "@solana/wallet-adapter-react";
+import {
+  ConnectionProvider,
+  WalletProvider,
+} from "@solana/wallet-adapter-react";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import "@solana/wallet-adapter-react-ui/styles.css";
@@ -24,5 +27,5 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );
