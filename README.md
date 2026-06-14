@@ -12,7 +12,7 @@ Flappy Bull turns the live SOL price into a game. The price line is the safe zon
 
 Your score streams to a **shared, real-time leaderboard** during the run and settles permanently on Solana when you crash. No wallet prompts mid-game — a session key signs everything in the background.
 
-### Trustless Scoring (Model C)
+### Trustless Scoring
 
 The game uses a **single-source deterministic physics engine** shared between browser and chain:
 
@@ -161,7 +161,7 @@ anchor test --provider.cluster devnet
 
 ## Project Status
 
-**Phase 3a (partial):** Single-source WASM sim is integrated; client runs the on-chain physics predictor at 60 fps. On-chain replay and leaderboard (3b–3d) in progress.
+MVP is live on devnet. There are plans to improve cosmetics, gamify logic, add reward and monetization layers.
 
 See [ROADMAP.md](ROADMAP.md) for the full build plan and [PRD.md](PRD.md) for product requirements.
 
