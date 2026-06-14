@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAnchorWallet, useWallet } from "@solana/wallet-adapter-react";
-import { Connection, PublicKey, Keypair, Transaction } from "@solana/web3.js";
+import { Connection, PublicKey, Keypair, Transaction, TransactionInstruction } from "@solana/web3.js";
 import { Program, AnchorProvider, Idl } from "@coral-xyz/anchor";
 import { GetCommitmentSignature } from "@magicblock-labs/ephemeral-rollups-sdk";
 import {
@@ -9,10 +9,17 @@ import {
   getDelegationStatus,
   DelegationStatus,
 } from "../lib/connections";
-import { derivePythFeedAddress } from "./usePriceOracle";
 import idlJson from "../idl/flappy_bull.json";
 
 const PROGRAM_ID = new PublicKey("5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ");
+
+// Pre-computed constants for hot-path instruction building (use web APIs — Buffer unavailable at module init time)
+const SEASON_PDA = PublicKey.findProgramAddressSync(
+  [new TextEncoder().encode("season")],
+  PROGRAM_ID
+)[0];
+// sha256("global:submit_tap")[0..8]
+const SUBMIT_TAP_DISC = new Uint8Array([117, 171, 17, 53, 85, 233, 67, 235]);
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -47,7 +54,7 @@ export type GameSessionHook = {
   leaderboard: LeaderboardEntry[];
   error: string | null;
   startNewGame: () => Promise<void>;
-  submitTap: (tick: number, priceLo: number, priceHi: number) => Promise<void>;
+  submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
   submitScore: () => Promise<void>;
 };
@@ -193,9 +200,41 @@ export function useGameSession(): GameSessionHook {
   // committed + undelegated before a new game can start.
   const autoFinishRef = useRef(false);
 
-  // Serializes ER taps so they land in tick order (out-of-order taps fail the
-  // on-chain monotonic check and desync the simulation).
-  const tapQueueRef = useRef<Promise<void>>(Promise.resolve());
+  // Latest blockhash for fire-and-forget frame submissions
+  const blockhashRef = useRef<string | null>(null);
+  const blockhashTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Frame sequence counter for sampled error logging
+  const frameSeqRef = useRef(0);
+
+  // ── Blockhash pump ───────────────────────────────────────────────────────
+
+  function startBlockhashPump(erConn: Connection) {
+    erConn
+      .getLatestBlockhash("confirmed")
+      .then((r) => { blockhashRef.current = r.blockhash; })
+      .catch(() => {});
+
+    if (blockhashTimerRef.current) clearInterval(blockhashTimerRef.current);
+    blockhashTimerRef.current = setInterval(() => {
+      erConn
+        .getLatestBlockhash("confirmed")
+        .then((r) => { blockhashRef.current = r.blockhash; })
+        .catch(() => {}); // Keep last good hash on transient error
+    }, 2000);
+  }
+
+  function stopBlockhashPump() {
+    if (blockhashTimerRef.current) {
+      clearInterval(blockhashTimerRef.current);
+      blockhashTimerRef.current = null;
+    }
+  }
+
+  // Stop pump on unmount
+  useEffect(() => {
+    return () => { stopBlockhashPump(); };
+  }, []);
 
   // ── Re-hydrate session state from chain ─────────────────────────────────
 
@@ -205,6 +244,7 @@ export function useGameSession(): GameSessionHook {
       setSessionPda(null);
       setGameState(null);
       erConnectionRef.current = null;
+      stopBlockhashPump();
       return;
     }
 
@@ -243,7 +283,10 @@ export function useGameSession(): GameSessionHook {
           status.isDelegated && status.fqdn
             ? makeErConnection(status.fqdn)
             : null;
-        if (erConn) erConnectionRef.current = erConn;
+        if (erConn) {
+          erConnectionRef.current = erConn;
+          startBlockhashPump(erConn);
+        }
 
         let alive = false;
         let settled = false;
@@ -358,7 +401,9 @@ export function useGameSession(): GameSessionHook {
       const status = await getDelegationStatus(pda);
 
       if (status.fqdn) {
-        erConnectionRef.current = makeErConnection(status.fqdn);
+        const erConn = makeErConnection(status.fqdn);
+        erConnectionRef.current = erConn;
+        startBlockhashPump(erConn);
         erWarnedRef.current = false;
       }
 
@@ -377,57 +422,59 @@ export function useGameSession(): GameSessionHook {
     }
   }, [publicKey, anchorWallet]);
 
-  // ── submitTap: called by game loop on user input ────────────────────────
+  // ── submitFrame: fire-and-forget per-frame streaming ───────────────────
 
-  const submitTap = useCallback(
-    async (tick: number, priceLo: number, priceHi: number) => {
-      if (!sessionPda || !anchorWallet) return;
+  const submitFrame = useCallback(
+    (tick: number, tap: boolean, priceLo: number, priceHi: number): void => {
+      if (!sessionPda) return;
       const erConn = erConnectionRef.current;
       if (!erConn) {
         if (!erWarnedRef.current) {
           erWarnedRef.current = true;
-          console.warn("[submitTap] No ER connection (local-only mode)");
+          console.warn("[submitFrame] No ER connection (local-only mode)");
         }
         return;
       }
+      const blockhash = blockhashRef.current;
+      if (!blockhash) return;
 
-      // Chain onto the queue so taps are sent strictly in tick order.
-      const run = tapQueueRef.current.then(async () => {
-        try {
-          const program = makeProgram(
-            erConn,
-            keypairWallet(ephemeralRef.current)
-          );
-          const seasonPda = getSeasonPda();
-          const pythFeed = derivePythFeedAddress();
+      const seq = ++frameSeqRef.current;
+      const ephemeral = ephemeralRef.current;
 
-          const ix = await program.methods
-            .submitTap(tick, priceLo, priceHi)
-            .accounts({
-              authority: ephemeralRef.current.publicKey,
-              gameSession: sessionPda,
-              seasonParams: seasonPda,
-              pythPriceFeed: pythFeed,
-            })
-            .instruction();
+      // Build instruction data directly — avoids Anchor's async promise chain at 60fps.
+      // Layout: discriminator(8) + tick(4,u32le) + tap(1,bool) + priceLo(4,u32le) + priceHi(4,i32le)
+      const data = new Uint8Array(21);
+      data.set(SUBMIT_TAP_DISC, 0);
+      const view = new DataView(data.buffer);
+      view.setUint32(8, tick, true);
+      view.setUint8(12, tap ? 1 : 0);
+      view.setUint32(13, priceLo, true);
+      view.setInt32(17, priceHi, true);
 
-          await sendErRaw(erConn, ix, ephemeralRef.current);
-        } catch (e: any) {
-          // Log but don't error-out the game for transient failures
-          console.warn("[submitTap] error:", e.message);
-          if (typeof e.getLogs === "function") {
-            try {
-              console.warn("[submitTap] logs:", await e.getLogs(erConn));
-            } catch {}
-          } else if (e.logs) {
-            console.warn("[submitTap] logs:", e.logs);
-          }
-        }
+      const ix = new TransactionInstruction({
+        programId: PROGRAM_ID,
+        keys: [
+          { pubkey: ephemeral.publicKey, isSigner: true, isWritable: true },
+          { pubkey: sessionPda, isSigner: false, isWritable: true },
+          { pubkey: SEASON_PDA, isSigner: false, isWritable: false },
+        ],
+        data: data as unknown as Buffer,
       });
-      tapQueueRef.current = run;
-      return run;
+
+      const tx = new Transaction().add(ix);
+      tx.feePayer = ephemeral.publicKey;
+      tx.recentBlockhash = blockhash;
+      tx.sign(ephemeral);
+
+      erConn
+        .sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 0 })
+        .catch((e: any) => {
+          if (seq % 30 === 0) {
+            console.warn("[submitFrame] error (sampled):", e.message);
+          }
+        });
     },
-    [sessionPda, anchorWallet]
+    [sessionPda]
   );
 
   // ── finishRun: catch up + commit + undelegate on ER ─────────────────────
@@ -444,14 +491,8 @@ export function useGameSession(): GameSessionHook {
       return;
     }
 
-    // Drain the tap queue so every tap lands on-chain before we commit +
-    // undelegate. Otherwise finish_run runs with a partial tap set and the
-    // forward-sim kills the bull early, diverging from the client.
-    try {
-      await tapQueueRef.current;
-    } catch {
-      // individual tap errors are already logged in submitTap
-    }
+    // Short drain delay so trailing fire-and-forget frames land before commit.
+    await new Promise((r) => setTimeout(r, 200));
 
     try {
       const program = makeProgram(erConn, keypairWallet(ephemeralRef.current));
@@ -467,6 +508,9 @@ export function useGameSession(): GameSessionHook {
         .instruction();
 
       const sig = await sendErRaw(erConn, ix, ephemeralRef.current);
+
+      // Stop pump — no more frames after commit
+      stopBlockhashPump();
 
       // Wait for commit signature
       const commitSig = await GetCommitmentSignature(sig, erConn);
@@ -553,7 +597,7 @@ export function useGameSession(): GameSessionHook {
     leaderboard,
     error,
     startNewGame,
-    submitTap,
+    submitFrame,
     finishRun,
     submitScore,
   };

@@ -466,11 +466,11 @@
     {
       "name": "submit_tap",
       "docs": [
-        "ER instruction: advance sim_state by N ticks, optionally applying a tap.",
+        "ER instruction: advance sim_state by one tick with the submitted inputs.",
         "",
-        "Client posts (tick, tap_flag, price). On-chain reads Pyth Lazer feed",
-        "independently to verify the submitted price, then runs deterministic",
-        "sim_core::step with the on-chain verified price."
+        "Client streams every frame: (tick, tap, price). On-chain advances the",
+        "sim using the client-submitted price exactly, ensuring deterministic",
+        "replay of the same channel_center trajectory as the client."
       ],
       "discriminator": [
         117,
@@ -530,18 +530,16 @@
               }
             ]
           }
-        },
-        {
-          "name": "pyth_price_feed",
-          "docs": [
-            "When zero or unreadable, falls back to client-submitted price."
-          ]
         }
       ],
       "args": [
         {
           "name": "tick",
           "type": "u32"
+        },
+        {
+          "name": "tap",
+          "type": "bool"
         },
         {
           "name": "price_lo",
@@ -693,11 +691,6 @@
       "code": 6006,
       "name": "ScoreExceedsTick",
       "msg": "Score cannot exceed tick count"
-    },
-    {
-      "code": 6007,
-      "name": "PriceMismatch",
-      "msg": "Submitted price deviates from on-chain Pyth feed beyond tolerance"
     }
   ],
   "types": [

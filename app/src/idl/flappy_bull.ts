@@ -472,11 +472,11 @@ export type FlappyBull = {
     {
       "name": "submitTap",
       "docs": [
-        "ER instruction: advance sim_state by N ticks, optionally applying a tap.",
+        "ER instruction: advance sim_state by one tick with the submitted inputs.",
         "",
-        "Client posts (tick, tap_flag, price). On-chain reads Pyth Lazer feed",
-        "independently to verify the submitted price, then runs deterministic",
-        "sim_core::step with the on-chain verified price."
+        "Client streams every frame: (tick, tap, price). On-chain advances the",
+        "sim using the client-submitted price exactly, ensuring deterministic",
+        "replay of the same channel_center trajectory as the client."
       ],
       "discriminator": [
         117,
@@ -536,18 +536,16 @@ export type FlappyBull = {
               }
             ]
           }
-        },
-        {
-          "name": "pythPriceFeed",
-          "docs": [
-            "When zero or unreadable, falls back to client-submitted price."
-          ]
         }
       ],
       "args": [
         {
           "name": "tick",
           "type": "u32"
+        },
+        {
+          "name": "tap",
+          "type": "bool"
         },
         {
           "name": "priceLo",
@@ -700,11 +698,6 @@ export type FlappyBull = {
       "name": "scoreExceedsTick",
       "msg": "Score cannot exceed tick count"
     },
-    {
-      "code": 6007,
-      "name": "priceMismatch",
-      "msg": "Submitted price deviates from on-chain Pyth feed beyond tolerance"
-    }
   ],
   "types": [
     {

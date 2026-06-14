@@ -33,7 +33,7 @@ import type { GamePhase } from "../hooks/useGameSession";
 type Props = {
   price: number | null;
   sessionPhase: GamePhase;
-  submitTap: (tick: number, priceLo: number, priceHi: number) => Promise<void>;
+  submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
 };
 
@@ -50,7 +50,7 @@ function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: nu
   return { body: 0x1a3a3a, cap: 0x2a5a5a, edge: 0x4488aa };
 }
 
-export function GameCanvas({ price, sessionPhase, submitTap, finishRun }: Props) {
+export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // TS game state: phase transitions + cosmetic assists only
@@ -75,8 +75,8 @@ export function GameCanvas({ price, sessionPhase, submitTap, finishRun }: Props)
   channelStateRef.current = liveChannelState;
 
   // On-chain callbacks (from shared session via props)
-  const submitTapRef = useRef(submitTap);
-  submitTapRef.current = submitTap;
+  const submitFrameRef = useRef(submitFrame);
+  submitFrameRef.current = submitFrame;
   const finishRunRef = useRef(finishRun);
   finishRunRef.current = finishRun;
   const sessionPhaseRef = useRef(sessionPhase);
@@ -278,22 +278,16 @@ export function GameCanvas({ price, sessionPhase, submitTap, finishRun }: Props)
           console.log("[DBG] tap:", prev.phase, "->", tsStateRef.current.phase, "sess=", sessPhase, "wasmReady=", wasmReadyRef.current);
 
           if (prev.phase === "DEAD" && tsStateRef.current.phase === "IDLE") {
-            // Restart: reset wasm state
+            // Restart: reset wasm state with price=0 to match on-chain start_run
             if (wasmReadyRef.current && wasmCfgRef.current) {
               const mid = (CANVAS_H / 2) * SCALE;
-              const p = effectivePrice(priceRef.current);
-              wasmStateRef.current = wasm_init_state(
-                mid, mid, priceToLo(p), priceToHi(p)
-              );
+              wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
             }
           } else if (prev.phase === "IDLE" && tsStateRef.current.phase === "PLAYING") {
-            // First tap: init wasm as alive
+            // First tap: init wasm with price=0 to match on-chain start_run
             if (wasmReadyRef.current && wasmCfgRef.current) {
               const mid = (CANVAS_H / 2) * SCALE;
-              const p = effectivePrice(priceRef.current);
-              wasmStateRef.current = wasm_init_state(
-                mid, mid, priceToLo(p), priceToHi(p)
-              );
+              wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
             }
           }
 
@@ -349,9 +343,9 @@ export function GameCanvas({ price, sessionPhase, submitTap, finishRun }: Props)
             wasmScore = ws.score;
             wasmAlive = isAlive(ws.flags);
 
-            // Fire on-chain submitTap (async, fire-and-forget)
-            if (tap && wasmAlive) {
-              submitTapRef.current(tickBeforeStep, pLo, pHi);
+            // Stream this frame on-chain (fire-and-forget, every frame while alive)
+            if (wasmAlive) {
+              submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
             }
 
             // Propagate death to TS phase

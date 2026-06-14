@@ -27,7 +27,7 @@ export function GameShell({ price }: Props) {
       <GameCanvas
         price={price}
         sessionPhase={session.phase}
-        submitTap={session.submitTap}
+        submitFrame={session.submitFrame}
         finishRun={session.finishRun}
       />
 

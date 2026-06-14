@@ -245,14 +245,15 @@ pub mod flappy_bull {
         Ok(())
     }
 
-    /// ER instruction: advance sim_state by N ticks, optionally applying a tap.
+    /// ER instruction: advance sim_state by one tick with the submitted inputs.
     ///
-    /// Client posts (tick, tap_flag, price). On-chain reads Pyth Lazer feed
-    /// independently to verify the submitted price, then runs deterministic
-    /// sim_core::step with the on-chain verified price.
+    /// Client streams every frame: (tick, tap, price). On-chain advances the
+    /// sim using the client-submitted price exactly, ensuring deterministic
+    /// replay of the same channel_center trajectory as the client.
     pub fn submit_tap(
         ctx: Context<SubmitTap>,
         tick: u32,
+        tap: bool,
         price_lo: u32,
         price_hi: i32,
     ) -> Result<()> {
@@ -265,25 +266,19 @@ pub mod flappy_bull {
             ErrorCode::Unauthorized
         );
 
-        // Monotonic tick. `tick` is the client's pre-tap tick; after applying a
-        // tap at T the on-chain tick becomes T+1, so a stale duplicate (T >= T+1)
-        // is still rejected while the first tap (0 >= 0) and consecutive-frame
-        // taps (T+1 >= T+1) are accepted.
+        // Monotonic tick. With per-frame streaming, tick == s.tick in the common
+        // case (catch-up loop runs 0 iterations). The loop is a safety net for
+        // rare dropped frames.
         require!(tick >= gs.sim_state.tick, ErrorCode::TickNotMonotonic);
 
         // Must be alive
         require!(gs.alive, ErrorCode::BullDead);
 
-        // Reconstruct submitted price
-        let submitted_price = ((price_hi as i64) << 32) | (price_lo as u64 as i64);
+        // Use the client-submitted price directly for deterministic replay.
+        let verified_price: i64 = ((price_hi as i64) << 32) | (price_lo as u64 as i64);
         let cfg: SimConfig = ctx.accounts.season_params.physics.into();
 
-        // Verify submitted price against on-chain Pyth Lazer feed.
-        // Falls back to client price if feed is unreadable or zero.
-        let verified_price: i64 =
-            try_verify_price(&ctx.accounts.pyth_price_feed, submitted_price)?;
-
-        // Advance ticks up to (but not including) the tap tick
+        // Catch-up loop: safety net for dropped frames (normally 0 iterations).
         let mut s: SimCoreState = gs.sim_state.into();
         for _ in s.tick..tick {
             if !is_alive(s.flags) {
@@ -292,9 +287,9 @@ pub mod flappy_bull {
             s = step(s, &cfg, false, verified_price);
         }
 
-        // Apply the tap if still alive
+        // Apply the actual tap flag for this frame
         if is_alive(s.flags) {
-            s = step(s, &cfg, true, verified_price);
+            s = step(s, &cfg, tap, verified_price);
         }
 
         gs.tap_count = gs.tap_count.saturating_add(1);
@@ -419,49 +414,6 @@ pub mod flappy_bull {
     }
 }
 
-// ── Price Verification Helper ──────────────────────────────────────────────
-
-/// Read Pyth Lazer SOL/USD price from feed account and verify against
-/// the submitted price. Falls back to submitted price if feed is
-/// unreadable or zero (graceful degradation for ER environments).
-fn try_verify_price(
-    pyth_feed: &UncheckedAccount,
-    submitted_price: i64,
-) -> Result<i64> {
-    match pyth_feed.try_borrow_data() {
-        Ok(bytes) if bytes.len() >= 81 => {
-            // Pyth Lazer PriceUpdateV2: raw i64 at byte offset 73 (LE)
-            let raw = i64::from_le_bytes(
-                bytes[73..81].try_into().unwrap_or([0u8; 8]),
-            );
-            if raw != 0 {
-                // Pyth raw is 10^-8 dollars; sim scale is 10^-5 => /1000
-                let on_chain_price = raw / 1000;
-                let diff = (submitted_price - on_chain_price).abs();
-                require!(diff <= PRICE_TOLERANCE, ErrorCode::PriceMismatch);
-                msg!(
-                    "Price verified: sub={} on_chain={} diff={}",
-                    submitted_price,
-                    on_chain_price,
-                    diff
-                );
-                return Ok(on_chain_price);
-            }
-            msg!("Pyth feed zero — trusting client price");
-        }
-        Ok(data) => {
-            msg!(
-                "Pyth feed too short ({} B) — trusting client",
-                data.len()
-            );
-        }
-        Err(_) => {
-            msg!("Pyth feed unreadable — trusting client price");
-        }
-    }
-    Ok(submitted_price)
-}
-
 // ── Account Validation Structs ─────────────────────────────────────────────
 
 #[derive(Accounts)]
@@ -544,9 +496,6 @@ pub struct SubmitTap<'info> {
         bump,
     )]
     pub season_params: Account<'info, SeasonParams>,
-    /// CHECK: Pyth Lazer SOL/USD price feed. Raw i64 at byte offset 73 (LE).
-    /// When zero or unreadable, falls back to client-submitted price.
-    pub pyth_price_feed: UncheckedAccount<'info>,
 }
 
 #[commit]
@@ -586,11 +535,6 @@ pub struct UpdateLeaderboard<'info> {
 
 // ── Errors ─────────────────────────────────────────────────────────────────
 
-/// Maximum allowed difference between submitted and on-chain Pyth price
-/// in sim scale (dollars * 100_000).  2000 = $0.02 — covers normal Pyth
-/// movement between client read and ER tx processing (~1-3 updates).
-const PRICE_TOLERANCE: i64 = 2000;
-
 #[error_code]
 pub enum ErrorCode {
     #[msg("Only the session key may submit taps")]
@@ -607,6 +551,4 @@ pub enum ErrorCode {
     NoTapsSubmitted,
     #[msg("Score cannot exceed tick count")]
     ScoreExceedsTick,
-    #[msg("Submitted price deviates from on-chain Pyth feed beyond tolerance")]
-    PriceMismatch,
 }
