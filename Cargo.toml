@@ -1,12 +1,16 @@
 [workspace]
-members = ["programs/flappy-bull"]
+members = ["programs/flappy-bull", "sim-core"]
 resolver = "2"
+
+[profile.dev]
+panic = "abort"
 
 [profile.release]
 overflow-checks = true
 lto = "thin"
 strip = "none"
 codegen-units = 1
+panic = "abort"
 [profile.release.build-override]
 opt-level = 3
 incremental = false

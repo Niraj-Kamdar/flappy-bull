@@ -12,8 +12,6 @@ import {
   DUMP_VEL_THRESHOLD,
   ASSIST_TICKS,
   COIN_SCORE,
-  CHANNEL_LERP_BASE,
-  CHANNEL_LERP_FAST,
   PIPE_SPACING_MIN,
   PIPE_SPACING_MAX,
   PIPE_CENTER_STEP_BASE,
@@ -23,7 +21,18 @@ import {
   RAMP_PIPES,
   PIPE_WIDTH,
 } from "../game/constants";
-import { initState, tick, applyTap, GameState } from "../game/physics";
+import { initState, applyTap, GameState } from "../game/physics";
+import {
+  initSimCore,
+  wasm_step,
+  wasm_init_state,
+  wasm_default_config,
+  WasmSimState,
+  WasmSeasonConfig,
+  isAlive,
+  priceToLo,
+  priceToHi,
+} from "../game/simCore";
 import { usePriceChannel, PriceChannelState, VolatilityState } from "../hooks/usePriceChannel";
 
 type Props = { price: number | null };
@@ -40,13 +49,20 @@ function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: nu
 
 export function GameCanvas({ price }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const stateRef = useRef<GameState>(initState(CANVAS_H));
+
+  // TS game state: phase transitions + cosmetic assists only
+  const tsStateRef = useRef<GameState>(initState(CANVAS_H));
+
+  // WASM authoritative sim state
+  const wasmStateRef = useRef<WasmSimState | null>(null);
+  const wasmCfgRef = useRef<WasmSeasonConfig | null>(null);
+  const wasmReadyRef = useRef(false);
+
   const scrollOffsetRef = useRef(0);
   const priceRef = useRef<number | null>(price);
   priceRef.current = price;
 
   const channelStateRef = useRef<PriceChannelState>({
-    targetCenterPx: CANVAS_H / 2,
     channelHalf: 75,
     pipeSpacing: PIPE_SPACING_MAX,
     volatilityState: "NORMAL",
@@ -56,12 +72,24 @@ export function GameCanvas({ price }: Props) {
   const liveChannelState = usePriceChannel(price);
   channelStateRef.current = liveChannelState;
 
+  const pendingTapRef = useRef(false);
   const pendingAssistRef = useRef<"rocket" | "parachute" | null>(null);
   const prevVolStateRef = useRef<VolatilityState>("NORMAL");
   const shakeTicksRef = useRef(0);
   const pulseCounterRef = useRef(0);
   const sirenFadeRef = useRef(0);
-  const prevPhaseRef = useRef<GameState["phase"]>("IDLE");
+  const prevWasDeadRef = useRef(false);
+
+  // Init wasm on mount
+  useEffect(() => {
+    initSimCore().then(() => {
+      const cfg = wasm_default_config();
+      wasmCfgRef.current = cfg;
+      const mid = (CANVAS_H / 2) * SCALE;
+      wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
+      wasmReadyRef.current = true;
+    });
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -182,7 +210,6 @@ export function GameCanvas({ price }: Props) {
             const gapBot = pipe.gapCenterY + pipe.gapHalf;
             const capH = 12;
 
-            // Top pipe
             if (gapTop > capH) {
               pipeGraphics.rect(pipe.x, 0, PIPE_WIDTH, gapTop - capH);
               pipeGraphics.fill({ color: body });
@@ -190,7 +217,6 @@ export function GameCanvas({ price }: Props) {
             pipeGraphics.rect(pipe.x - 4, gapTop - capH, PIPE_WIDTH + 8, capH);
             pipeGraphics.fill({ color: cap });
 
-            // Bottom pipe
             pipeGraphics.rect(pipe.x - 4, gapBot, PIPE_WIDTH + 8, capH);
             pipeGraphics.fill({ color: cap });
             if (gapBot + capH < CANVAS_H) {
@@ -198,10 +224,8 @@ export function GameCanvas({ price }: Props) {
               pipeGraphics.fill({ color: body });
             }
 
-            // Edge glow on cap lips
-            const alpha = pipe.vol === "SQUEEZE"
-              ? 0.4 + 0.35 * Math.sin(pulse * 0.15)
-              : 0.75;
+            const alpha =
+              pipe.vol === "SQUEEZE" ? 0.4 + 0.35 * Math.sin(pulse * 0.15) : 0.75;
             pipeGraphics.setStrokeStyle({ width: 2, color: edge, alpha });
             pipeGraphics.moveTo(pipe.x - 4, gapTop - capH);
             pipeGraphics.lineTo(pipe.x + PIPE_WIDTH + 4, gapTop - capH);
@@ -213,8 +237,33 @@ export function GameCanvas({ price }: Props) {
         }
 
         const onTap = () => {
-          stateRef.current = applyTap(stateRef.current, CANVAS_H);
+          // Drain into TS state for phase transitions (IDLE→PLAYING, DEAD→IDLE)
+          const prev = tsStateRef.current;
+          tsStateRef.current = applyTap(tsStateRef.current, CANVAS_H);
+
+          if (prev.phase === "DEAD" && tsStateRef.current.phase === "IDLE") {
+            // Restart: reset wasm state
+            if (wasmReadyRef.current && wasmCfgRef.current) {
+              const mid = (CANVAS_H / 2) * SCALE;
+              const p = priceRef.current ?? 0;
+              wasmStateRef.current = wasm_init_state(
+                mid, mid, priceToLo(p), priceToHi(p)
+              );
+            }
+          } else if (prev.phase === "IDLE" && tsStateRef.current.phase === "PLAYING") {
+            // First tap: init wasm as alive
+            if (wasmReadyRef.current && wasmCfgRef.current) {
+              const mid = (CANVAS_H / 2) * SCALE;
+              const p = priceRef.current ?? 0;
+              wasmStateRef.current = wasm_init_state(
+                mid, mid, priceToLo(p), priceToHi(p)
+              );
+            }
+          }
+
+          pendingTapRef.current = true;
         };
+
         app.canvas.addEventListener("pointerdown", onTap);
         const onKey = (e: KeyboardEvent) => {
           if (e.code === "Space") onTap();
@@ -222,32 +271,67 @@ export function GameCanvas({ price }: Props) {
         window.addEventListener("keydown", onKey);
 
         app.ticker.add(() => {
-          const { targetCenterPx, channelHalf, pipeSpacing, volatilityState, priceVelocity } = channelStateRef.current;
-          const prevPhase = prevPhaseRef.current;
-          const state = stateRef.current;
+          const { channelHalf, pipeSpacing, volatilityState, priceVelocity } = channelStateRef.current;
+          const tsPhase = tsStateRef.current.phase;
+          const assist = tsStateRef.current.assist;
 
-          // Restart: clear pipes/coins/particles
-          if (prevPhase === "DEAD" && state.phase === "IDLE") {
+          // On restart (DEAD→IDLE), clear cosmetics
+          if (prevWasDeadRef.current && tsPhase === "IDLE") {
             pipes.length = 0;
             coins.length = 0;
             particles.length = 0;
             pipesPassedRef.current = 0;
           }
 
-          // Assist detection
-          if (state.phase === "PLAYING") {
-            if (priceVelocity >= PUMP_VEL_THRESHOLD && state.assist === "none" && pendingAssistRef.current === null) {
+          // Drain pending tap flag
+          const tap = pendingTapRef.current;
+          pendingTapRef.current = false;
+
+          // ── WASM authoritative step ──────────────────────────────────────
+          let bullYPx = (CANVAS_H / 2);
+          let channelCenterPx = (CANVAS_H / 2);
+          let wasmScore = 0;
+          let wasmAlive = false;
+
+          if (wasmReadyRef.current && wasmCfgRef.current && wasmStateRef.current && tsPhase === "PLAYING") {
+            const p = priceRef.current;
+            const pLo = p != null ? priceToLo(p) : 0;
+            const pHi = p != null ? priceToHi(p) : 0;
+            wasmStateRef.current = wasm_step(
+              wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi
+            );
+            const ws = wasmStateRef.current;
+            bullYPx = ws.bull_y / SCALE;
+            channelCenterPx = ws.channel_center / SCALE;
+            wasmScore = ws.score;
+            wasmAlive = isAlive(ws.flags);
+
+            // Propagate death to TS phase
+            if (!wasmAlive && tsPhase === "PLAYING") {
+              tsStateRef.current = { ...tsStateRef.current, phase: "DEAD" };
+              shakeTicksRef.current = 30;
+            }
+          } else if (wasmStateRef.current) {
+            bullYPx = wasmStateRef.current.bull_y / SCALE;
+            channelCenterPx = wasmStateRef.current.channel_center / SCALE;
+            wasmScore = wasmStateRef.current.score;
+          }
+
+          scrollOffsetRef.current = (scrollOffsetRef.current + SCROLL_SPEED) % GRID_SPACING;
+
+          // ── Cosmetic assist detection (visual only) ─────────────────────
+          if (tsPhase === "PLAYING") {
+            if (priceVelocity >= PUMP_VEL_THRESHOLD && assist === "none" && pendingAssistRef.current === null) {
               pendingAssistRef.current = "rocket";
             }
-            if (priceVelocity <= DUMP_VEL_THRESHOLD && state.assist === "none" && pendingAssistRef.current === null) {
+            if (priceVelocity <= DUMP_VEL_THRESHOLD && assist === "none" && pendingAssistRef.current === null) {
               pendingAssistRef.current = "parachute";
             }
-            if (pendingAssistRef.current && state.assist === "none") {
+            if (pendingAssistRef.current && assist === "none") {
               const assistType = pendingAssistRef.current;
-              stateRef.current = { ...state, assist: assistType, assistTicks: ASSIST_TICKS };
+              tsStateRef.current = { ...tsStateRef.current, assist: assistType, assistTicks: ASSIST_TICKS };
               pendingAssistRef.current = null;
               if (assistType === "rocket") {
-                const bullYPx = stateRef.current.bullY / SCALE;
                 for (let i = 0; i < 12; i++) {
                   const angle = (i / 12) * Math.PI * 2;
                   particles.push({ x: BULL_X, y: bullYPx, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4, life: 1.0, color: 0x00ff88 });
@@ -258,63 +342,37 @@ export function GameCanvas({ price }: Props) {
                 sirenFadeRef.current = 90;
               }
             }
+            // Tick down assist
+            if (tsStateRef.current.assistTicks > 0) {
+              const newTicks = tsStateRef.current.assistTicks - 1;
+              tsStateRef.current = {
+                ...tsStateRef.current,
+                assistTicks: newTicks,
+                assist: newTicks === 0 ? "none" : tsStateRef.current.assist,
+              };
+            }
           }
 
-          // Channel center lerp (runs every phase so gap position tracks price even on IDLE)
-          const isFastMove = Math.abs(priceVelocity) >= PUMP_VEL_THRESHOLD;
-          const lerpSpeed = isFastMove ? CHANNEL_LERP_FAST : CHANNEL_LERP_BASE;
-          const currentCenter = stateRef.current.channelCenter;
-          const targetScaled = targetCenterPx * SCALE;
-          stateRef.current = {
-            ...stateRef.current,
-            channelCenter: Math.round(currentCenter + (targetScaled - currentCenter) * lerpSpeed),
-          };
-
-          // Physics tick (canvas ceiling/floor death only; pipe collision below)
-          stateRef.current = tick(stateRef.current);
-          scrollOffsetRef.current = (scrollOffsetRef.current + SCROLL_SPEED) % GRID_SPACING;
-
-          // Pipe spawning, scrolling, collision, score
-          if (stateRef.current.phase === "PLAYING") {
-            const centerPx = stateRef.current.channelCenter / SCALE;
-
-            // Spawn new pipe — bounded-step center, ramped gap/spacing
+          // ── Cosmetic pipe spawning / collision visuals ──────────────────
+          if (tsPhase === "PLAYING") {
             const rampT = Math.min(1, pipesPassedRef.current / RAMP_PIPES);
             const stepCap = PIPE_CENTER_STEP_BASE + rampT * (PIPE_CENTER_STEP_MAX - PIPE_CENTER_STEP_BASE);
             const effHalf = Math.round(channelHalf + (1 - rampT) * EARLY_GAP_BONUS);
             const effSpacing = Math.max(PIPE_SPACING_MIN, pipeSpacing - rampT * RAMP_SPACING_TIGHTEN);
             const lastPipe = pipes[pipes.length - 1];
+
             if (!lastPipe || lastPipe.x < CANVAS_W - effSpacing) {
-              const baseCenter = lastPipe ? lastPipe.gapCenterY : centerPx;
-              const delta = Math.max(-stepCap, Math.min(stepCap, targetCenterPx - baseCenter));
+              const baseCenter = lastPipe ? lastPipe.gapCenterY : channelCenterPx;
+              const delta = Math.max(-stepCap, Math.min(stepCap, channelCenterPx - baseCenter));
               const newCenter = Math.max(effHalf + 10, Math.min(CANVAS_H - effHalf - 10, baseCenter + delta));
               pipes.push({ x: CANVAS_W + 10, gapCenterY: newCenter, gapHalf: effHalf, scored: false, vol: volatilityState });
             }
 
-            const bullYPx = stateRef.current.bullY / SCALE;
-            let hitPipe = false;
             for (const pipe of pipes) {
               pipe.x -= SCROLL_SPEED;
-
-              if (
-                !hitPipe &&
-                pipe.x < BULL_X + BULL_RADIUS &&
-                pipe.x + PIPE_WIDTH > BULL_X - BULL_RADIUS
-              ) {
-                if (
-                  bullYPx - BULL_RADIUS < pipe.gapCenterY - pipe.gapHalf ||
-                  bullYPx + BULL_RADIUS > pipe.gapCenterY + pipe.gapHalf
-                ) {
-                  stateRef.current = { ...stateRef.current, phase: "DEAD", assist: "none", assistTicks: 0 };
-                  shakeTicksRef.current = 30;
-                  hitPipe = true;
-                }
-              }
-
               if (!pipe.scored && pipe.x + PIPE_WIDTH < BULL_X) {
                 pipe.scored = true;
                 pipesPassedRef.current++;
-                stateRef.current = { ...stateRef.current, score: stateRef.current.score + 1 };
               }
             }
             while (pipes.length && pipes[0].x + PIPE_WIDTH < -10) pipes.shift();
@@ -323,42 +381,37 @@ export function GameCanvas({ price }: Props) {
             if (volatilityState === "BREAKOUT" && prevVolStateRef.current !== "BREAKOUT") {
               for (let i = 0; i < 4; i++) {
                 const spread = (channelHalf - 20) * (2 * Math.random() - 1);
-                coins.push({ x: CANVAS_W + i * 90, y: centerPx + spread, collected: false });
+                coins.push({ x: CANVAS_W + i * 90, y: channelCenterPx + spread, collected: false });
               }
             }
           }
           prevVolStateRef.current = volatilityState;
 
-          // Coin scroll + collection
-          const bullYPxFinal = stateRef.current.bullY / SCALE;
+          // Coin scroll + collection (cosmetic; score comes from wasm)
           for (const c of coins) {
             if (c.collected) continue;
             c.x -= SCROLL_SPEED;
             if (
-              stateRef.current.phase === "PLAYING" &&
+              tsPhase === "PLAYING" &&
               Math.abs(c.x - BULL_X) < BULL_RADIUS * 2 &&
-              Math.abs(c.y - bullYPxFinal) < BULL_RADIUS * 2
+              Math.abs(c.y - bullYPx) < BULL_RADIUS * 2
             ) {
               c.collected = true;
-              stateRef.current = { ...stateRef.current, score: stateRef.current.score + COIN_SCORE };
             }
           }
           while (coins.length && coins[0].x < -20) coins.shift();
 
-          const finalState = stateRef.current;
-          const finalBullY = finalState.bullY / SCALE;
-
-          // Background tint by state
+          // ── Render ──────────────────────────────────────────────────────
+          const currentAssist = tsStateRef.current.assist;
           const bgColor =
-            finalState.assist === "parachute" ? 0x140004 :
-            finalState.assist === "rocket"    ? 0x04140a :
-            volatilityState === "SQUEEZE"     ? 0x0a0a18 : 0x0a0a14;
+            currentAssist === "parachute" ? 0x140004 :
+            currentAssist === "rocket"    ? 0x04140a :
+            volatilityState === "SQUEEZE" ? 0x0a0a18 : 0x0a0a14;
 
           drawBg(scrollOffsetRef.current, bgColor);
           pulseCounterRef.current++;
           drawPipes(pipes, pulseCounterRef.current);
 
-          // Particles
           for (let i = particles.length - 1; i >= 0; i--) {
             const p = particles[i];
             p.x += p.vx; p.y += p.vy; p.life -= 1 / 30;
@@ -370,7 +423,6 @@ export function GameCanvas({ price }: Props) {
             particleGfx.fill({ color: p.color, alpha: p.life });
           }
 
-          // Coins render
           coinGfx.clear();
           for (const c of coins) {
             if (c.collected) continue;
@@ -379,12 +431,11 @@ export function GameCanvas({ price }: Props) {
             coinGfx.fill({ color: 0xffcc00 });
           }
 
-          bullGfx.y = finalBullY;
-          scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${finalState.score}`;
+          bullGfx.y = bullYPx;
+          scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${wasmScore}`;
           const p = priceRef.current;
           priceText.text = p !== null ? `SOL: $${p.toFixed(2)}` : "SOL: --";
 
-          // Siren fade
           if (sirenFadeRef.current > 0) {
             sirenText.alpha = Math.min(1, sirenFadeRef.current / 20);
             sirenFadeRef.current--;
@@ -392,7 +443,6 @@ export function GameCanvas({ price }: Props) {
             sirenText.visible = false;
           }
 
-          // Screen shake
           if (shakeTicksRef.current > 0) {
             const intensity = 6 * (shakeTicksRef.current / 30);
             app.stage.x = (Math.random() - 0.5) * 2 * intensity;
@@ -403,20 +453,19 @@ export function GameCanvas({ price }: Props) {
             app.stage.y = 0;
           }
 
-          // Overlays
-          if (finalState.phase === "IDLE") {
+          prevWasDeadRef.current = tsPhase === "DEAD";
+
+          if (tsPhase === "IDLE") {
             overlayContainer.visible = true;
             overlayTitle.text = "TAP TO FLY";
             overlaySubtext.text = "";
-          } else if (finalState.phase === "DEAD") {
+          } else if (tsPhase === "DEAD") {
             overlayContainer.visible = true;
             overlayTitle.text = "LIQUIDATED";
-            overlaySubtext.text = `Score: ${finalState.score}   |   TAP TO RESTART`;
+            overlaySubtext.text = `Score: ${wasmScore}   |   TAP TO RESTART`;
           } else {
             overlayContainer.visible = false;
           }
-
-          prevPhaseRef.current = finalState.phase;
         });
 
         return () => {

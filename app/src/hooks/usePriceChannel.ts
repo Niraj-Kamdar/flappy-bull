@@ -14,7 +14,6 @@ import {
 export type VolatilityState = "NORMAL" | "SQUEEZE" | "BREAKOUT";
 
 export type PriceChannelState = {
-  targetCenterPx: number;
   channelHalf: number;
   pipeSpacing: number;
   volatilityState: VolatilityState;
@@ -29,7 +28,6 @@ function stddev(arr: number[]): number {
 }
 
 const DEFAULT_STATE: PriceChannelState = {
-  targetCenterPx: CANVAS_H / 2,
   channelHalf: 75,
   pipeSpacing: PIPE_SPACING_MAX,
   volatilityState: "NORMAL",
@@ -58,12 +56,9 @@ export function usePriceChannel(price: number | null): PriceChannelState {
     const volatilityState: VolatilityState =
       sd <= VOLATILITY_SD_LOW ? "SQUEEZE" : sd >= VOLATILITY_SD_HIGH ? "BREAKOUT" : "NORMAL";
 
-    const rawY = Math.floor((price % 1) * PRICE_FRAC_SCALE) % CANVAS_H;
-    const targetCenterPx = rawY;
-
     const pipeSpacing = Math.round(PIPE_SPACING_MAX - t * (PIPE_SPACING_MAX - PIPE_SPACING_MIN));
 
-    setState({ targetCenterPx, channelHalf, pipeSpacing, volatilityState, priceVelocity });
+    setState({ channelHalf, pipeSpacing, volatilityState, priceVelocity });
   }, [price]);
 
   return state;

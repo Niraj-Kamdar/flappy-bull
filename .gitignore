@@ -7,3 +7,4 @@ target/
 app/dist/
 .anchor/
 
+app/src/wasm/

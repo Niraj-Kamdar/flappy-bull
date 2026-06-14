@@ -1,0 +1,19 @@
+{
+  "id": "death_floor",
+  "season_config": {
+    "gravity": 32, "tap_boost": 768, "max_up_vel": 900, "max_vel_y": 1536,
+    "scale": 256, "canvas_h_px": 500, "bull_radius_px": 14, "channel_half_min": 70,
+    "lerp_num_base": 4, "lerp_den": 100, "lerp_num_fast": 10,
+    "price_vel_fast_thresh": 8000, "price_frac_scale": 100000, "season": 1
+  },
+  "start_state": {
+    "bull_y": 123916, "vel_y": 1536, "channel_center": 64000,
+    "tick": 0, "score": 0, "price": 150000, "flags": 1
+  },
+  "taps": [],
+  "price_samples": [{"tick": 0, "price": 150000}],
+  "steps": 5,
+  "expected": {
+    "score": 0, "tick": 1, "alive": false, "bull_y": 125452, "state_hash": 2381141838
+  }
+}
