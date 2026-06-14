@@ -1,8 +1,6 @@
-import { usePriceOracle } from "../hooks/usePriceOracle";
+type Props = { price: number | null; lastUpdated: Date | null };
 
-export function PriceDisplay() {
-  const { price, lastUpdated } = usePriceOracle();
-
+export function PriceDisplay({ price, lastUpdated }: Props) {
   return (
     <div style={{ fontFamily: "monospace", fontSize: "24px" }}>
       <span style={{ color: "#888", fontSize: "12px" }}>SOL/USD </span>

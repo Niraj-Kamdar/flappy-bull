@@ -31,6 +31,14 @@ export { wasm_step, wasm_init_state, wasm_default_config, WasmSimState, WasmSeas
 export const FLAG_ALIVE = 1 << 0;
 export const isAlive = (flags: number) => (flags & FLAG_ALIVE) !== 0;
 
+/** Default SOL/USD price used when oracle is unavailable. */
+export const DEFAULT_PRICE = 150;
+
+/** Real price if > 0, otherwise DEFAULT_PRICE. Guards against zeroed oracle feeds. */
+export function effectivePrice(price: number | null): number {
+  return price && price > 0 ? price : DEFAULT_PRICE;
+}
+
 // Price i64 split helpers (price in game is a JS number = float64, safe up to 2^53)
 export function priceToLo(price: number): number {
   return (price * 100_000) & 0xffffffff;

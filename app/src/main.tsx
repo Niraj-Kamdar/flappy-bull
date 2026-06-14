@@ -8,6 +8,7 @@ import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import { App } from "./App";
+import { GameSessionProvider } from "./context/GameSessionContext";
 import { BASE_RPC } from "./lib/connections";
 
 const wallets = [new PhantomWalletAdapter()];
@@ -17,7 +18,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <ConnectionProvider endpoint={BASE_RPC}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
-          <App />
+          <GameSessionProvider>
+            <App />
+          </GameSessionProvider>
         </WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>

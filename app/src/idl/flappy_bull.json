@@ -1,5 +1,5 @@
 {
-  "address": "96hj71eqGzxuLhLSnVL9BB4WoA3xn9riKq3BLAxmxR7J",
+  "address": "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ",
   "metadata": {
     "name": "flappy_bull",
     "version": "0.1.0",
@@ -9,6 +9,9 @@
   "instructions": [
     {
       "name": "delegate",
+      "docs": [
+        "Delegate the GameSession PDA to the ER (existing pattern)."
+      ],
       "discriminator": [
         90,
         147,
@@ -49,38 +52,38 @@
             "program": {
               "kind": "const",
               "value": [
-                120,
-                83,
-                114,
-                202,
-                192,
-                112,
-                99,
-                132,
-                114,
+                63,
+                230,
+                25,
+                136,
+                229,
+                147,
+                122,
+                103,
+                88,
+                194,
+                105,
+                67,
+                244,
+                236,
+                54,
+                230,
                 239,
-                228,
-                145,
-                50,
-                16,
-                161,
+                6,
+                254,
                 207,
-                176,
-                107,
+                190,
+                66,
+                132,
+                79,
+                231,
+                247,
+                210,
+                148,
+                233,
+                1,
                 112,
-                97,
-                20,
-                239,
-                186,
-                46,
-                213,
-                91,
-                2,
-                253,
-                5,
-                232,
-                189,
-                69
+                31
               ]
             }
           }
@@ -182,7 +185,7 @@
         },
         {
           "name": "owner_program",
-          "address": "96hj71eqGzxuLhLSnVL9BB4WoA3xn9riKq3BLAxmxR7J"
+          "address": "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ"
         },
         {
           "name": "delegation_program",
@@ -196,25 +199,134 @@
       "args": []
     },
     {
-      "name": "initialize",
+      "name": "finish_run",
+      "docs": [
+        "ER instruction: catch up remaining ticks until death, then commit + undelegate.",
+        "",
+        "Works whether the bull is still alive (simulate forward to death) or",
+        "already dead (the loop runs zero iterations). The dead case is needed to",
+        "commit + undelegate a session that died mid-run, freeing the PDA."
+      ],
       "discriminator": [
-        175,
-        175,
-        109,
-        31,
-        13,
-        152,
-        155,
-        237
+        125,
+        146,
+        243,
+        213,
+        56,
+        220,
+        214,
+        25
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
         {
           "name": "game_session",
+          "docs": [
+            "Anchor re-serializing after commit_and_undelegate reassigns ownership.",
+            "The PDA is verified against its recorded player in the handler."
+          ],
+          "writable": true
+        },
+        {
+          "name": "season_params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  97,
+                  115,
+                  111,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_leaderboard",
+      "docs": [
+        "Admin: create the Leaderboard PDA (empty top-10)."
+      ],
+      "discriminator": [
+        70,
+        179,
+        5,
+        151,
+        152,
+        16,
+        47,
+        15
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "leaderboard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  98
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_season",
+      "docs": [
+        "Admin: create the SeasonParams PDA with default physics."
+      ],
+      "discriminator": [
+        179,
+        47,
+        101,
+        197,
+        114,
+        97,
+        174,
+        98
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "season_params",
           "writable": true,
           "pda": {
             "seeds": [
@@ -223,16 +335,11 @@
                 "value": [
                   115,
                   101,
+                  97,
                   115,
-                  115,
-                  105,
                   111,
                   110
                 ]
-              },
-              {
-                "kind": "account",
-                "path": "player"
               }
             ]
           }
@@ -282,35 +389,229 @@
       ]
     },
     {
-      "name": "undelegate",
+      "name": "start_run",
+      "docs": [
+        "Player creates/resets a GameSession with a fresh sim state."
+      ],
       "discriminator": [
-        131,
-        148,
-        180,
-        198,
+        72,
+        212,
+        1,
         91,
-        104,
-        42,
-        238
+        61,
+        186,
+        2,
+        52
       ],
       "accounts": [
         {
-          "name": "payer",
+          "name": "player",
           "writable": true,
           "signer": true
         },
         {
           "name": "game_session",
-          "writable": true
-        },
-        {
-          "name": "magic_program",
-          "address": "Magic11111111111111111111111111111111111111"
-        },
-        {
-          "name": "magic_context",
           "writable": true,
-          "address": "MagicContext1111111111111111111111111111111"
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "season_params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  97,
+                  115,
+                  111,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "session_key",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "submit_tap",
+      "docs": [
+        "ER instruction: advance sim_state by N ticks, optionally applying a tap.",
+        "",
+        "Client posts (tick, tap_flag, price). On-chain reads Pyth Lazer feed",
+        "independently to verify the submitted price, then runs deterministic",
+        "sim_core::step with the on-chain verified price."
+      ],
+      "discriminator": [
+        117,
+        171,
+        17,
+        53,
+        85,
+        233,
+        67,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game_session",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "game_session.player",
+                "account": "GameSession"
+              }
+            ]
+          }
+        },
+        {
+          "name": "season_params",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  97,
+                  115,
+                  111,
+                  110
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "pyth_price_feed",
+          "docs": [
+            "When zero or unreadable, falls back to client-submitted price."
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "tick",
+          "type": "u32"
+        },
+        {
+          "name": "price_lo",
+          "type": "u32"
+        },
+        {
+          "name": "price_hi",
+          "type": "i32"
+        }
+      ]
+    },
+    {
+      "name": "update_leaderboard",
+      "docs": [
+        "Base-layer instruction: verify finished run and insert into leaderboard."
+      ],
+      "discriminator": [
+        72,
+        95,
+        102,
+        32,
+        118,
+        158,
+        247,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "game_session",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "leaderboard",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  98
+                ]
+              }
+            ]
+          }
         }
       ],
       "args": []
@@ -329,6 +630,74 @@
         220,
         240
       ]
+    },
+    {
+      "name": "Leaderboard",
+      "discriminator": [
+        247,
+        186,
+        238,
+        243,
+        194,
+        30,
+        9,
+        36
+      ]
+    },
+    {
+      "name": "SeasonParams",
+      "discriminator": [
+        77,
+        88,
+        56,
+        124,
+        184,
+        182,
+        53,
+        155
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Only the session key may submit taps"
+    },
+    {
+      "code": 6001,
+      "name": "TickNotMonotonic",
+      "msg": "Tick must be greater than the current sim tick"
+    },
+    {
+      "code": 6002,
+      "name": "BullDead",
+      "msg": "Bull is already dead"
+    },
+    {
+      "code": 6003,
+      "name": "RunNotFinished",
+      "msg": "Run must be finished (bull dead) before updating leaderboard"
+    },
+    {
+      "code": 6004,
+      "name": "AlreadySettled",
+      "msg": "This run has already been settled"
+    },
+    {
+      "code": 6005,
+      "name": "NoTapsSubmitted",
+      "msg": "Must submit at least one tap"
+    },
+    {
+      "code": 6006,
+      "name": "ScoreExceedsTick",
+      "msg": "Score cannot exceed tick count"
+    },
+    {
+      "code": 6007,
+      "name": "PriceMismatch",
+      "msg": "Submitted price deviates from on-chain Pyth feed beyond tolerance"
     }
   ],
   "types": [
@@ -342,24 +711,239 @@
             "type": "pubkey"
           },
           {
-            "name": "score",
+            "name": "session_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "season",
+            "type": "u8"
+          },
+          {
+            "name": "start_slot",
             "type": "u64"
           },
           {
-            "name": "started_at",
-            "type": "i64"
+            "name": "tap_count",
+            "type": "u32"
           },
           {
             "name": "alive",
             "type": "bool"
           },
           {
-            "name": "session_key",
+            "name": "settled",
+            "type": "bool"
+          },
+          {
+            "name": "sim_state",
+            "type": {
+              "defined": {
+                "name": "SimState"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Leaderboard",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "players",
+            "type": {
+              "array": [
+                "pubkey",
+                10
+              ]
+            }
+          },
+          {
+            "name": "scores",
+            "type": {
+              "array": [
+                "u32",
+                10
+              ]
+            }
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeasonConfig",
+      "docs": [
+        "Physics config — mirrors sim_core::SeasonConfig field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "gravity",
+            "type": "i32"
+          },
+          {
+            "name": "tap_boost",
+            "type": "i32"
+          },
+          {
+            "name": "max_up_vel",
+            "type": "i32"
+          },
+          {
+            "name": "max_vel_y",
+            "type": "i32"
+          },
+          {
+            "name": "scale",
+            "type": "i32"
+          },
+          {
+            "name": "canvas_h_px",
+            "type": "i32"
+          },
+          {
+            "name": "bull_radius_px",
+            "type": "i32"
+          },
+          {
+            "name": "channel_half_min",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_num_base",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_den",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_num_fast",
+            "type": "i32"
+          },
+          {
+            "name": "canvas_w_px",
+            "type": "i32"
+          },
+          {
+            "name": "bull_x_px",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_width_px",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_scroll",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_spacing_px",
+            "type": "i32"
+          },
+          {
+            "name": "price_vel_fast_thresh",
+            "type": "i64"
+          },
+          {
+            "name": "price_frac_scale",
+            "type": "i64"
+          },
+          {
+            "name": "season",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeasonParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
             "type": "pubkey"
           },
           {
-            "name": "settled",
-            "type": "bool"
+            "name": "physics",
+            "type": {
+              "defined": {
+                "name": "SeasonConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimState",
+      "docs": [
+        "Fixed-point sim state — mirrors sim_core::SimState field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bull_y",
+            "type": "i32"
+          },
+          {
+            "name": "vel_y",
+            "type": "i32"
+          },
+          {
+            "name": "channel_center",
+            "type": "i32"
+          },
+          {
+            "name": "tick",
+            "type": "u32"
+          },
+          {
+            "name": "score",
+            "type": "u32"
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "flags",
+            "type": "u32"
+          },
+          {
+            "name": "pipe_x",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
+          },
+          {
+            "name": "pipe_gap",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
           }
         ]
       }

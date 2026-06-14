@@ -25,10 +25,17 @@ import {
   isAlive,
   priceToLo,
   priceToHi,
+  effectivePrice,
 } from "../game/simCore";
 import { usePriceChannel, PriceChannelState, VolatilityState } from "../hooks/usePriceChannel";
+import type { GamePhase } from "../hooks/useGameSession";
 
-type Props = { price: number | null };
+type Props = {
+  price: number | null;
+  sessionPhase: GamePhase;
+  submitTap: (tick: number, priceLo: number, priceHi: number) => Promise<void>;
+  finishRun: () => Promise<void>;
+};
 
 type Coin = { x: number; y: number; collected: boolean };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: number };
@@ -43,7 +50,7 @@ function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: nu
   return { body: 0x1a3a3a, cap: 0x2a5a5a, edge: 0x4488aa };
 }
 
-export function GameCanvas({ price }: Props) {
+export function GameCanvas({ price, sessionPhase, submitTap, finishRun }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // TS game state: phase transitions + cosmetic assists only
@@ -66,6 +73,16 @@ export function GameCanvas({ price }: Props) {
   });
   const liveChannelState = usePriceChannel(price);
   channelStateRef.current = liveChannelState;
+
+  // On-chain callbacks (from shared session via props)
+  const submitTapRef = useRef(submitTap);
+  submitTapRef.current = submitTap;
+  const finishRunRef = useRef(finishRun);
+  finishRunRef.current = finishRun;
+  const sessionPhaseRef = useRef(sessionPhase);
+  sessionPhaseRef.current = sessionPhase;
+  // Track if we already called finishRun for current run
+  const finishCalledRef = useRef(false);
 
   const pendingTapRef = useRef(false);
   const pendingAssistRef = useRef<"rocket" | "parachute" | null>(null);
@@ -243,16 +260,28 @@ export function GameCanvas({ price }: Props) {
         }
 
         const onTap = () => {
-          // Drain into TS state for phase transitions (IDLE→PLAYING, DEAD→IDLE)
           const prev = tsStateRef.current;
+          const sessPhase = sessionPhaseRef.current;
+
+          // Gate: don't start game unless on-chain session is PLAYING
+          if (prev.phase === "IDLE" && sessPhase !== "PLAYING") {
+            return; // Overlay handles onboarding
+          }
+
+          // Gate: don't restart while session is settling
+          if (prev.phase === "DEAD" && (sessPhase === "FINISHING" || sessPhase === "SETTLING")) {
+            return;
+          }
+
+          // Drain into TS state for phase transitions (IDLE→PLAYING, DEAD→IDLE)
           tsStateRef.current = applyTap(tsStateRef.current, CANVAS_H);
-          console.log("[DBG] tap:", prev.phase, "->", tsStateRef.current.phase, "wasmReady=", wasmReadyRef.current);
+          console.log("[DBG] tap:", prev.phase, "->", tsStateRef.current.phase, "sess=", sessPhase, "wasmReady=", wasmReadyRef.current);
 
           if (prev.phase === "DEAD" && tsStateRef.current.phase === "IDLE") {
             // Restart: reset wasm state
             if (wasmReadyRef.current && wasmCfgRef.current) {
               const mid = (CANVAS_H / 2) * SCALE;
-              const p = priceRef.current ?? 0;
+              const p = effectivePrice(priceRef.current);
               wasmStateRef.current = wasm_init_state(
                 mid, mid, priceToLo(p), priceToHi(p)
               );
@@ -261,7 +290,7 @@ export function GameCanvas({ price }: Props) {
             // First tap: init wasm as alive
             if (wasmReadyRef.current && wasmCfgRef.current) {
               const mid = (CANVAS_H / 2) * SCALE;
-              const p = priceRef.current ?? 0;
+              const p = effectivePrice(priceRef.current);
               wasmStateRef.current = wasm_init_state(
                 mid, mid, priceToLo(p), priceToHi(p)
               );
@@ -289,6 +318,7 @@ export function GameCanvas({ price }: Props) {
           if (prevWasDeadRef.current && tsPhase === "IDLE") {
             coins.length = 0;
             particles.length = 0;
+            finishCalledRef.current = false;
           }
 
           // Drain pending tap flag
@@ -300,12 +330,13 @@ export function GameCanvas({ price }: Props) {
           let channelCenterPx = (CANVAS_H / 2);
           let wasmScore = 0;
           let wasmAlive = false;
+          let tickBeforeStep = 0;
 
           if (wasmReadyRef.current && wasmCfgRef.current && wasmStateRef.current && tsPhase === "PLAYING") {
-            const p = priceRef.current;
-            const pLo = p != null ? priceToLo(p) : 0;
-            const pHi = p != null ? priceToHi(p) : 0;
-            if (dbgFrame < 3) console.log("[DBG] pre-step f=", dbgFrame, "p=", p, "pLo=", pLo, "pHi=", pHi, "tap=", tap);
+            const p = effectivePrice(priceRef.current);
+            const pLo = priceToLo(p);
+            const pHi = priceToHi(p);
+            tickBeforeStep = wasmStateRef.current.tick;
             wasm_step(wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi);
             const ws = wasmStateRef.current;
             if (dbgFrame < 3) console.log("[DBG] post-step f=", dbgFrame, "bull_y=", ws.bull_y, "flags=", ws.flags, "score=", ws.score, "p0x=", ws.pipe0_x, "p0gap=", ws.pipe0_gap);
@@ -318,6 +349,11 @@ export function GameCanvas({ price }: Props) {
             wasmScore = ws.score;
             wasmAlive = isAlive(ws.flags);
 
+            // Fire on-chain submitTap (async, fire-and-forget)
+            if (tap && wasmAlive) {
+              submitTapRef.current(tickBeforeStep, pLo, pHi);
+            }
+
             // Propagate death to TS phase
             if (!wasmAlive && tsPhase === "PLAYING") {
               const ceil = wasmCfgRef.current.bull_radius_px * wasmCfgRef.current.scale;
@@ -326,6 +362,12 @@ export function GameCanvas({ price }: Props) {
                 "p0x=", ws.pipe0_x, "p1x=", ws.pipe1_x, "p2x=", ws.pipe2_x, "p3x=", ws.pipe3_x, "tapThisFrame=", tap);
               tsStateRef.current = { ...tsStateRef.current, phase: "DEAD" };
               shakeTicksRef.current = 30;
+
+              // Fire on-chain finishRun (async)
+              if (!finishCalledRef.current) {
+                finishCalledRef.current = true;
+                finishRunRef.current();
+              }
             }
           } else if (wasmStateRef.current) {
             bullYPx = wasmStateRef.current.bull_y / SCALE;
@@ -430,8 +472,8 @@ export function GameCanvas({ price }: Props) {
 
           bullGfx.y = bullYPx;
           scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${wasmScore}`;
-          const p = priceRef.current;
-          priceText.text = p !== null ? `SOL: $${p.toFixed(2)}` : "SOL: --";
+          const p = effectivePrice(priceRef.current);
+          priceText.text = `SOL: $${p.toFixed(2)}`;
 
           if (sirenFadeRef.current > 0) {
             sirenText.alpha = Math.min(1, sirenFadeRef.current / 20);
@@ -452,15 +494,20 @@ export function GameCanvas({ price }: Props) {
 
           prevWasDeadRef.current = tsPhase === "DEAD";
 
-          if (tsPhase === "IDLE") {
+          const sessPhase = sessionPhaseRef.current;
+          if (tsPhase === "IDLE" && sessPhase === "PLAYING") {
+            // Game delegated and ready — player hasn't tapped yet
             overlayContainer.visible = true;
             overlayTitle.text = "TAP TO FLY";
             overlaySubtext.text = "";
           } else if (tsPhase === "DEAD") {
             overlayContainer.visible = true;
             overlayTitle.text = "LIQUIDATED";
-            overlaySubtext.text = `Score: ${wasmScore}   |   TAP TO RESTART`;
+            overlaySubtext.text = `Score: ${wasmScore}`;
+          } else if (tsPhase === "PLAYING") {
+            overlayContainer.visible = false;
           } else {
+            // IDLE (not yet PLAYING session): overlay handled by StartScreen
             overlayContainer.visible = false;
           }
          } catch (err) {

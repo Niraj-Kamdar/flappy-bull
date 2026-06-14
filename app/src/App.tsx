@@ -1,11 +1,10 @@
 import { WalletButton } from "./components/WalletButton";
 import { PriceDisplay } from "./components/PriceDisplay";
-import { GameCanvas } from "./components/GameCanvas";
-import { DelegateTest } from "./components/DelegateTest";
+import { GameShell } from "./components/GameShell";
 import { usePriceOracle } from "./hooks/usePriceOracle";
 
 export function App() {
-  const { price } = usePriceOracle();
+  const { price, lastUpdated } = usePriceOracle();
 
   return (
     <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px" }}>
@@ -17,12 +16,11 @@ export function App() {
           marginBottom: "24px",
         }}
       >
-        <PriceDisplay />
+        <PriceDisplay price={price} lastUpdated={lastUpdated} />
         <WalletButton />
       </div>
 
-      <GameCanvas price={price} />
-      <DelegateTest />
+      <GameShell price={price} />
     </div>
   );
 }

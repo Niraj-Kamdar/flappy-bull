@@ -39,7 +39,7 @@ export function usePriceChannel(price: number | null): PriceChannelState {
   const historyRef = useRef<number[]>([]);
 
   useEffect(() => {
-    if (price === null) return;
+    if (price === null || price <= 0) return;
 
     const history = historyRef.current;
     history.push(price);
