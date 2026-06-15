@@ -343,10 +343,10 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
             wasmScore = ws.score;
             wasmAlive = isAlive(ws.flags);
 
-            // Stream this frame on-chain (fire-and-forget). Always send tap frames;
-            // send position-only frames every 2nd tick to halve sign/serialize cost.
-            // On-chain catch-up loop steps the skipped tick with tap=false.
-            if (wasmAlive && (tap || tickBeforeStep % 2 === 0)) {
+            // Stream every frame on-chain (fire-and-forget) so on-chain state
+            // stays in lockstep — catch-up with stale price causes channel_center
+            // divergence and premature on-chain death.
+            if (wasmAlive) {
               submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
             }
 

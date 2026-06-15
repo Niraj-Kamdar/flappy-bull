@@ -284,7 +284,10 @@ pub mod flappy_bull {
             if !is_alive(s.flags) {
                 break;
             }
-            s = step(s, &cfg, false, verified_price);
+            // Use stored price for catch-up ticks: the client used the oracle
+            // price that was live at each tick, not the current frame's price.
+            // Using s.price keeps channel_center trajectory faithful.
+            s = step(s, &cfg, false, s.price);
         }
 
         // Apply the actual tap flag for this frame
