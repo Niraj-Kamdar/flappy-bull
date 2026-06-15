@@ -1,3 +1,4 @@
+import "./index.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import {
@@ -7,9 +8,9 @@ import {
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import "@solana/wallet-adapter-react-ui/styles.css";
-import { App } from "./App";
 import { GameSessionProvider } from "./context/GameSessionContext";
 import { BASE_RPC } from "./lib/connections";
+import { AppRouter } from "./router";
 
 const wallets = [new PhantomWalletAdapter()];
 
@@ -19,7 +20,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
           <GameSessionProvider>
-            <App />
+            <AppRouter />
           </GameSessionProvider>
         </WalletModalProvider>
       </WalletProvider>
