@@ -245,17 +245,28 @@ pub mod flappy_bull {
         Ok(())
     }
 
-    /// ER instruction: advance sim_state by one tick with the submitted inputs.
+    /// ER instruction: advance sim_state by a batch of ticks.
     ///
-    /// Client streams every frame: (tick, tap, price). On-chain advances the
-    /// sim using the client-submitted price exactly, ensuring deterministic
-    /// replay of the same channel_center trajectory as the client.
-    pub fn submit_tap(
-        ctx: Context<SubmitTap>,
-        tick: u32,
-        tap: bool,
-        price_lo: u32,
-        price_hi: i32,
+    /// Batch-streamed application: a batch covers ticks `[start_tick ..
+    /// start_tick + taps.len())`, each frame carrying its tap and tap-time
+    /// price. The consumer (one tx = one tick) is structurally slower than the
+    /// 60–120 fps producer; bundling many ticks per tx lets throughput keep up.
+    ///
+    /// Ordering is idempotent and gap-rejecting:
+    ///  - a fully-consumed batch (`end <= cur`) is a no-op (reorder/retransmit safe),
+    ///  - a batch that would skip a tick (`start_tick > cur`) rejects (`OutOfOrder`),
+    ///    so the client re-sends starting at the current sim tick,
+    ///  - otherwise only the unapplied suffix is applied, strictly in order.
+    ///
+    /// Each input carries its tap-time price, so network lag delays the input
+    /// and its price together — they stay aligned regardless of when the tx
+    /// lands. The client `step()` and this `step()` are bit-identical, so the
+    /// committed trajectory matches the client's.
+    pub fn submit_taps(
+        ctx: Context<SubmitTaps>,
+        start_tick: u32,
+        taps: Vec<bool>,
+        prices: Vec<i64>,
     ) -> Result<()> {
         let gs = &mut ctx.accounts.game_session;
 
@@ -266,33 +277,41 @@ pub mod flappy_bull {
             ErrorCode::Unauthorized
         );
 
-        // Monotonic tick. With per-frame streaming, tick == s.tick in the common
-        // case (catch-up loop runs 0 iterations). The loop is a safety net for
-        // rare dropped frames.
-        require!(tick >= gs.sim_state.tick, ErrorCode::TickNotMonotonic);
+        // Batch must be non-empty and have matched tap/price lengths.
+        require!(
+            !taps.is_empty() && taps.len() == prices.len(),
+            ErrorCode::BadBatch
+        );
 
-        // Must be alive
-        require!(gs.alive, ErrorCode::BullDead);
+        let cur = gs.sim_state.tick;
+        let len = taps.len() as u32;
+        let end = start_tick + len;
 
-        // Use the client-submitted price directly for deterministic replay.
-        let verified_price: i64 = ((price_hi as i64) << 32) | (price_lo as u64 as i64);
+        // Fully-consumed batch (reorder/retransmit) — idempotent no-op.
+        if end <= cur {
+            return Ok(());
+        }
+
+        // A batch that would skip a tick (gap) rejects; client re-sends from cur.
+        require!(start_tick <= cur, ErrorCode::OutOfOrder);
+
+        // Trailing batches after death = no-op.
+        if !gs.alive {
+            return Ok(());
+        }
+
         let cfg: SimConfig = ctx.accounts.season_params.physics.into();
-
-        // Catch-up loop: safety net for dropped frames (normally 0 iterations).
         let mut s: SimCoreState = gs.sim_state.into();
-        for _ in s.tick..tick {
+
+        // Apply only the unapplied suffix, strictly in order.
+        let skip = (cur - start_tick) as usize;
+        for i in skip..taps.len() {
             if !is_alive(s.flags) {
                 break;
             }
-            s = step(s, &cfg, false, verified_price);
+            s = step(s, &cfg, taps[i], prices[i]);
+            gs.tap_count = gs.tap_count.saturating_add(1);
         }
-
-        // Apply the actual tap flag for this frame
-        if is_alive(s.flags) {
-            s = step(s, &cfg, tap, verified_price);
-        }
-
-        gs.tap_count = gs.tap_count.saturating_add(1);
 
         if !is_alive(s.flags) {
             gs.alive = false;
@@ -302,13 +321,19 @@ pub mod flappy_bull {
         Ok(())
     }
 
-    /// ER instruction: catch up remaining ticks until death, then commit + undelegate.
+    /// ER instruction: commit the current sim state + undelegate, freeing the PDA.
     ///
-    /// Works whether the bull is still alive (simulate forward to death) or
-    /// already dead (the loop runs zero iterations). The dead case is needed to
-    /// commit + undelegate a session that died mid-run, freeing the PDA.
+    /// Commits the *real* applied state as-is — no forward-sim guess. Whatever
+    /// ticks the client streamed (via submit_taps) is what gets committed:
+    ///  - happy path: the client drains the whole input stream (incl. the fatal
+    ///    tick) before calling this, so the committed score == client death tick,
+    ///  - forfeit (crash/abandon while still alive): commits the true partial
+    ///    score rather than a fabricated death, and still undelegates so the PDA
+    ///    never locks.
+    ///
+    /// No `require!(!alive)` guard: an alive session must still be finalizable or
+    /// its PDA locks forever. We mark it not-alive here so it can settle.
     pub fn finish_run(ctx: Context<FinishRun>) -> Result<()> {
-        let cfg: SimConfig = ctx.accounts.season_params.physics.into();
         let session_info = ctx.accounts.game_session.to_account_info();
 
         // Manually (de)serialize the GameSession. An `Account<GameSession>` is
@@ -326,19 +351,7 @@ pub mod flappy_bull {
             Pubkey::find_program_address(&[b"session", gs.player.as_ref()], &crate::ID);
         require_keys_eq!(session_info.key(), expected, ErrorCode::Unauthorized);
 
-        let price = gs.sim_state.price;
-        let mut s: SimCoreState = gs.sim_state.into();
-
-        // Simulate forward until natural death (bounds or pipe collision).
-        // Safety cap: 2_000_000 ticks ≈ 17 min at 120 fps.
-        let start_tick = s.tick;
-        let max_ticks = 2_000_000u32;
-        while is_alive(s.flags) && s.tick - start_tick < max_ticks {
-            s = step(s, &cfg, false, price);
-        }
-
         gs.alive = false;
-        gs.sim_state = s.into();
 
         // Flush updated state to the account buffer before committing.
         gs.try_serialize(&mut &mut session_info.data.borrow_mut()[..])?;
@@ -482,7 +495,7 @@ pub struct DelegateSession<'info> {
 }
 
 #[derive(Accounts)]
-pub struct SubmitTap<'info> {
+pub struct SubmitTaps<'info> {
     #[account(mut)]
     pub authority: Signer<'info>, // ephemeral session_key
     #[account(
@@ -539,8 +552,8 @@ pub struct UpdateLeaderboard<'info> {
 pub enum ErrorCode {
     #[msg("Only the session key may submit taps")]
     Unauthorized,
-    #[msg("Tick must be greater than the current sim tick")]
-    TickNotMonotonic,
+    #[msg("Input tick must equal the current sim tick (strict-nonce ordering)")]
+    OutOfOrder,
     #[msg("Bull is already dead")]
     BullDead,
     #[msg("Run must be finished (bull dead) before updating leaderboard")]
@@ -551,4 +564,6 @@ pub enum ErrorCode {
     NoTapsSubmitted,
     #[msg("Score cannot exceed tick count")]
     ScoreExceedsTick,
+    #[msg("Batch must be non-empty with matching tap and price lengths")]
+    BadBatch,
 }

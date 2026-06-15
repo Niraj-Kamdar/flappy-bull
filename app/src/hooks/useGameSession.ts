@@ -18,8 +18,20 @@ const SEASON_PDA = PublicKey.findProgramAddressSync(
   [new TextEncoder().encode("season")],
   PROGRAM_ID
 )[0];
-// sha256("global:submit_tap")[0..8]
-const SUBMIT_TAP_DISC = new Uint8Array([117, 171, 17, 53, 85, 233, 67, 235]);
+// sha256("global:submit_taps")[0..8]
+const SUBMIT_TAPS_DISC = new Uint8Array([136, 226, 222, 173, 237, 63, 94, 102]);
+
+// Ticks per batch. Each batch tx is 20 + 9*BATCH_SIZE bytes (~920 B at 100),
+// well under the 1232 B tx limit. One confirmation applies up to BATCH_SIZE
+// ticks (~400 ticks/s) — far faster than the 60–120 fps producer.
+const BATCH_SIZE = 100;
+
+// GameSession account byte offsets (8-byte discriminator + borsh fields).
+// player(32)+session_key(32)+season(1)+start_slot(8)+tap_count(4) -> alive @85;
+// sim_state starts @87: bull_y,vel_y,channel_center,tick(@99),score(@103).
+const OFF_ALIVE = 85;
+const OFF_TICK = 99;
+const OFF_SCORE = 103;
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -200,41 +212,99 @@ export function useGameSession(): GameSessionHook {
   // committed + undelegated before a new game can start.
   const autoFinishRef = useRef(false);
 
-  // Latest blockhash for fire-and-forget frame submissions
-  const blockhashRef = useRef<string | null>(null);
-  const blockhashTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ── Batch-stream reconciliation state ──────────────────────────────────────
+  // inputLogRef: every frame's input, index == tick (the full replay log).
+  // ackedTickRef: on-chain sim_state.tick = next tick the program will apply
+  //   (0-based; equals count of applied ticks). Updated after each batch.
+  // aliveOnChainRef: on-chain alive flag (false once the fatal tick is applied).
+  // sendingRef/senderPromiseRef: single in-flight sender lock — only one batch
+  //   loop runs at a time; new frames just extend the log and re-trigger.
+  const inputLogRef = useRef<{ tap: boolean; pLo: number; pHi: number }[]>([]);
+  const ackedTickRef = useRef(0);
+  const aliveOnChainRef = useRef(true);
+  const sendingRef = useRef(false);
+  const senderPromiseRef = useRef<Promise<void> | null>(null);
 
-  // Frame sequence counter for sampled error logging
-  const frameSeqRef = useRef(0);
-
-  // ── Blockhash pump ───────────────────────────────────────────────────────
-
-  function startBlockhashPump(erConn: Connection) {
-    erConn
-      .getLatestBlockhash("confirmed")
-      .then((r) => { blockhashRef.current = r.blockhash; })
-      .catch(() => {});
-
-    if (blockhashTimerRef.current) clearInterval(blockhashTimerRef.current);
-    blockhashTimerRef.current = setInterval(() => {
-      erConn
-        .getLatestBlockhash("confirmed")
-        .then((r) => { blockhashRef.current = r.blockhash; })
-        .catch(() => {}); // Keep last good hash on transient error
-    }, 2000);
+  // Reset reconciliation state for a fresh run.
+  function resetReconcile() {
+    inputLogRef.current = [];
+    ackedTickRef.current = 0;
+    aliveOnChainRef.current = true;
+    sendingRef.current = false;
+    senderPromiseRef.current = null;
   }
 
-  function stopBlockhashPump() {
-    if (blockhashTimerRef.current) {
-      clearInterval(blockhashTimerRef.current);
-      blockhashTimerRef.current = null;
-    }
-  }
+  // Serial batch sender. While input remains unapplied, build a submit_taps tx
+  // for the next [ackedTick .. ackedTick+BATCH_SIZE) slice, send + confirm it,
+  // then read back the on-chain (tick, alive) to advance the cursor. Only one
+  // loop runs at once; concurrent triggers return the in-flight promise. On any
+  // error the loop exits and the next submitFrame/finishRun re-triggers it (a
+  // fresh blockhash per send → unique sig → no "already processed" dedup).
+  function kickSender(): Promise<void> {
+    if (sendingRef.current) return senderPromiseRef.current ?? Promise.resolve();
+    const erConn = erConnectionRef.current;
+    const pda = sessionPda;
+    if (!erConn || !pda) return Promise.resolve();
 
-  // Stop pump on unmount
-  useEffect(() => {
-    return () => { stopBlockhashPump(); };
-  }, []);
+    sendingRef.current = true;
+    const signer = ephemeralRef.current;
+    const p = (async () => {
+      try {
+        for (;;) {
+          const log = inputLogRef.current;
+          const start = ackedTickRef.current;
+          if (start >= log.length) break;
+          const endExc = Math.min(start + BATCH_SIZE, log.length);
+          const n = endExc - start;
+
+          // Borsh: disc(8) + start_tick(u32) + taps-vec(len u32 + n×bool)
+          //        + prices-vec(len u32 + n×i64 LE = [pLo u32, pHi i32]).
+          const data = new Uint8Array(20 + 9 * n);
+          data.set(SUBMIT_TAPS_DISC, 0);
+          const view = new DataView(data.buffer);
+          let o = 8;
+          view.setUint32(o, start, true); o += 4;
+          view.setUint32(o, n, true); o += 4;
+          for (let i = 0; i < n; i++) data[o++] = log[start + i].tap ? 1 : 0;
+          view.setUint32(o, n, true); o += 4;
+          for (let i = 0; i < n; i++) {
+            const inp = log[start + i];
+            view.setUint32(o, inp.pLo, true); o += 4;
+            view.setInt32(o, inp.pHi, true); o += 4;
+          }
+
+          const ix = new TransactionInstruction({
+            programId: PROGRAM_ID,
+            keys: [
+              { pubkey: signer.publicKey, isSigner: true, isWritable: true },
+              { pubkey: pda, isSigner: false, isWritable: true },
+              { pubkey: SEASON_PDA, isSigner: false, isWritable: false },
+            ],
+            data: data as unknown as Buffer,
+          });
+
+          const sig = await sendErRaw(erConn, ix, signer);
+          await erConn.confirmTransaction(sig, "confirmed");
+
+          const acct = await erConn.getAccountInfo(pda);
+          if (acct && acct.data.length >= OFF_SCORE + 4) {
+            const d = acct.data;
+            const dv = new DataView(d.buffer, d.byteOffset, d.length);
+            ackedTickRef.current = dv.getUint32(OFF_TICK, true);
+            aliveOnChainRef.current = d[OFF_ALIVE] === 1;
+          }
+          if (!aliveOnChainRef.current) break;
+        }
+      } catch (e: any) {
+        // Exit loop; next submitFrame/finishRun re-triggers from ackedTick.
+        console.warn("[kickSender] error:", e?.message);
+      } finally {
+        sendingRef.current = false;
+      }
+    })();
+    senderPromiseRef.current = p;
+    return p;
+  }
 
   // ── Re-hydrate session state from chain ─────────────────────────────────
 
@@ -244,7 +314,6 @@ export function useGameSession(): GameSessionHook {
       setSessionPda(null);
       setGameState(null);
       erConnectionRef.current = null;
-      stopBlockhashPump();
       return;
     }
 
@@ -285,15 +354,13 @@ export function useGameSession(): GameSessionHook {
             : null;
         if (erConn) {
           erConnectionRef.current = erConn;
-          startBlockhashPump(erConn);
+          resetReconcile();
         }
 
-        let alive = false;
         let settled = false;
         try {
           const program = makeProgram(erConn ?? baseConnection, anchorWallet!);
           const gs = await (program.account as any).gameSession.fetch(pda);
-          alive = gs.alive;
           settled = gs.settled;
           setGameState({
             alive: gs.alive,
@@ -308,14 +375,12 @@ export function useGameSession(): GameSessionHook {
         if (cancelled) return;
 
         if (status.isDelegated) {
-          if (alive) {
-            setPhase("PLAYING");
-          } else {
-            // Stuck: delegated but dead. Must finish (commit + undelegate)
-            // before a new game can start.
-            autoFinishRef.current = true;
-            setPhase("FINISHING");
-          }
+          // Any delegated session found at load is stuck: a crash/refresh lost
+          // the in-memory input log, so we can't resume the stream. Auto-finish
+          // (commit the real partial state + undelegate) frees the PDA so a new
+          // game can start. Covers both dead sessions and abandoned-alive ones.
+          autoFinishRef.current = true;
+          setPhase("FINISHING");
         } else if (settled) {
           setPhase("DONE");
         } else {
@@ -400,10 +465,10 @@ export function useGameSession(): GameSessionHook {
       await new Promise((r) => setTimeout(r, 3000));
       const status = await getDelegationStatus(pda);
 
+      resetReconcile();
       if (status.fqdn) {
         const erConn = makeErConnection(status.fqdn);
         erConnectionRef.current = erConn;
-        startBlockhashPump(erConn);
         erWarnedRef.current = false;
       }
 
@@ -422,7 +487,7 @@ export function useGameSession(): GameSessionHook {
     }
   }, [publicKey, anchorWallet]);
 
-  // ── submitFrame: fire-and-forget per-frame streaming ───────────────────
+  // ── submitFrame: record input, then trigger the batch sender ────────────
 
   const submitFrame = useCallback(
     (tick: number, tap: boolean, priceLo: number, priceHi: number): void => {
@@ -435,44 +500,11 @@ export function useGameSession(): GameSessionHook {
         }
         return;
       }
-      const blockhash = blockhashRef.current;
-      if (!blockhash) return;
 
-      const seq = ++frameSeqRef.current;
-      const ephemeral = ephemeralRef.current;
-
-      // Build instruction data directly — avoids Anchor's async promise chain at 60fps.
-      // Layout: discriminator(8) + tick(4,u32le) + tap(1,bool) + priceLo(4,u32le) + priceHi(4,i32le)
-      const data = new Uint8Array(21);
-      data.set(SUBMIT_TAP_DISC, 0);
-      const view = new DataView(data.buffer);
-      view.setUint32(8, tick, true);
-      view.setUint8(12, tap ? 1 : 0);
-      view.setUint32(13, priceLo, true);
-      view.setInt32(17, priceHi, true);
-
-      const ix = new TransactionInstruction({
-        programId: PROGRAM_ID,
-        keys: [
-          { pubkey: ephemeral.publicKey, isSigner: true, isWritable: true },
-          { pubkey: sessionPda, isSigner: false, isWritable: true },
-          { pubkey: SEASON_PDA, isSigner: false, isWritable: false },
-        ],
-        data: data as unknown as Buffer,
-      });
-
-      const tx = new Transaction().add(ix);
-      tx.feePayer = ephemeral.publicKey;
-      tx.recentBlockhash = blockhash;
-      tx.sign(ephemeral);
-
-      erConn
-        .sendRawTransaction(tx.serialize(), { skipPreflight: true, maxRetries: 0 })
-        .catch((e: any) => {
-          if (seq % 30 === 0) {
-            console.warn("[submitFrame] error (sampled):", e.message);
-          }
-        });
+      // Record this frame in the replay log (index == tick), then kick the
+      // serial batch sender (non-blocking; no-ops if already running).
+      inputLogRef.current[tick] = { tap, pLo: priceLo, pHi: priceHi };
+      kickSender();
     },
     [sessionPda]
   );
@@ -491,8 +523,22 @@ export function useGameSession(): GameSessionHook {
       return;
     }
 
-    // Short drain delay so trailing fire-and-forget frames land before commit.
-    await new Promise((r) => setTimeout(r, 200));
+    // Drain: keep the batch sender running until the program has applied every
+    // logged input (incl. the fatal tick) or the bull died on-chain. This
+    // guarantees the committed score == client death tick, since finish_run
+    // commits the on-chain state as-is (no forward-sim guess). On sustained
+    // network failure the deadline expires and we commit the real partial state
+    // rather than locking the PDA. The auto-recovery path (empty log) skips the
+    // loop entirely and finalizes as-is.
+    const drainDeadline = Date.now() + 15000;
+    while (
+      Date.now() < drainDeadline &&
+      aliveOnChainRef.current &&
+      ackedTickRef.current < inputLogRef.current.length
+    ) {
+      await kickSender();
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     try {
       const program = makeProgram(erConn, keypairWallet(ephemeralRef.current));
@@ -508,9 +554,6 @@ export function useGameSession(): GameSessionHook {
         .instruction();
 
       const sig = await sendErRaw(erConn, ix, ephemeralRef.current);
-
-      // Stop pump — no more frames after commit
-      stopBlockhashPump();
 
       // Wait for commit signature
       const commitSig = await GetCommitmentSignature(sig, erConn);

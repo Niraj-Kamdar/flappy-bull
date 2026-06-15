@@ -343,12 +343,11 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
             wasmScore = ws.score;
             wasmAlive = isAlive(ws.flags);
 
-            // Stream this frame on-chain (fire-and-forget). Always send tap frames;
-            // send position-only frames every 2nd tick to halve sign/serialize cost.
-            // On-chain catch-up loop steps the skipped tick with tap=false.
-            if (wasmAlive && (tap || tickBeforeStep % 2 === 0)) {
-              submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
-            }
+            // Strict-nonce streaming: submit EVERY tick contiguously, including
+            // the fatal one (the step that killed the bull). The program applies
+            // the identical input stream in order and dies at the same tick, so
+            // the committed score matches. Skipping ticks would stall the chain.
+            submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
 
             // Propagate death to TS phase
             if (!wasmAlive && tsPhase === "PLAYING") {

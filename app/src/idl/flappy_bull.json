@@ -201,11 +201,18 @@
     {
       "name": "finish_run",
       "docs": [
-        "ER instruction: catch up remaining ticks until death, then commit + undelegate.",
+        "ER instruction: commit the current sim state + undelegate, freeing the PDA.",
         "",
-        "Works whether the bull is still alive (simulate forward to death) or",
-        "already dead (the loop runs zero iterations). The dead case is needed to",
-        "commit + undelegate a session that died mid-run, freeing the PDA."
+        "Commits the *real* applied state as-is — no forward-sim guess. Whatever",
+        "ticks the client streamed (via submit_taps) is what gets committed:",
+        "- happy path: the client drains the whole input stream (incl. the fatal",
+        "tick) before calling this, so the committed score == client death tick,",
+        "- forfeit (crash/abandon while still alive): commits the true partial",
+        "score rather than a fabricated death, and still undelegates so the PDA",
+        "never locks.",
+        "",
+        "No `require!(!alive)` guard: an alive session must still be finalizable or",
+        "its PDA locks forever. We mark it not-alive here so it can settle."
       ],
       "discriminator": [
         125,
@@ -464,23 +471,35 @@
       ]
     },
     {
-      "name": "submit_tap",
+      "name": "submit_taps",
       "docs": [
-        "ER instruction: advance sim_state by one tick with the submitted inputs.",
+        "ER instruction: advance sim_state by a batch of ticks.",
         "",
-        "Client streams every frame: (tick, tap, price). On-chain advances the",
-        "sim using the client-submitted price exactly, ensuring deterministic",
-        "replay of the same channel_center trajectory as the client."
+        "Batch-streamed application: a batch covers ticks `[start_tick ..",
+        "start_tick + taps.len())`, each frame carrying its tap and tap-time",
+        "price. The consumer (one tx = one tick) is structurally slower than the",
+        "60–120 fps producer; bundling many ticks per tx lets throughput keep up.",
+        "",
+        "Ordering is idempotent and gap-rejecting:",
+        "- a fully-consumed batch (`end <= cur`) is a no-op (reorder/retransmit safe),",
+        "- a batch that would skip a tick (`start_tick > cur`) rejects (`OutOfOrder`),",
+        "so the client re-sends starting at the current sim tick,",
+        "- otherwise only the unapplied suffix is applied, strictly in order.",
+        "",
+        "Each input carries its tap-time price, so network lag delays the input",
+        "and its price together — they stay aligned regardless of when the tx",
+        "lands. The client `step()` and this `step()` are bit-identical, so the",
+        "committed trajectory matches the client's."
       ],
       "discriminator": [
-        117,
-        171,
-        17,
-        53,
-        85,
-        233,
-        67,
-        235
+        136,
+        226,
+        222,
+        173,
+        237,
+        63,
+        94,
+        102
       ],
       "accounts": [
         {
@@ -534,20 +553,20 @@
       ],
       "args": [
         {
-          "name": "tick",
+          "name": "start_tick",
           "type": "u32"
         },
         {
-          "name": "tap",
-          "type": "bool"
+          "name": "taps",
+          "type": {
+            "vec": "bool"
+          }
         },
         {
-          "name": "price_lo",
-          "type": "u32"
-        },
-        {
-          "name": "price_hi",
-          "type": "i32"
+          "name": "prices",
+          "type": {
+            "vec": "i64"
+          }
         }
       ]
     },
@@ -664,8 +683,8 @@
     },
     {
       "code": 6001,
-      "name": "TickNotMonotonic",
-      "msg": "Tick must be greater than the current sim tick"
+      "name": "OutOfOrder",
+      "msg": "Input tick must equal the current sim tick (strict-nonce ordering)"
     },
     {
       "code": 6002,
@@ -691,6 +710,11 @@
       "code": 6006,
       "name": "ScoreExceedsTick",
       "msg": "Score cannot exceed tick count"
+    },
+    {
+      "code": 6007,
+      "name": "BadBatch",
+      "msg": "Batch must be non-empty with matching tap and price lengths"
     }
   ],
   "types": [
