@@ -7,20 +7,23 @@ export function App() {
   const { price, lastUpdated } = usePriceOracle();
 
   return (
-    <div style={{ maxWidth: "900px", margin: "0 auto", padding: "24px" }}>
+    <div style={{ height: "100dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div
         style={{
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
-          marginBottom: "24px",
+          padding: "8px 16px",
+          flexShrink: 0,
         }}
       >
         <PriceDisplay price={price} lastUpdated={lastUpdated} />
         <WalletButton />
       </div>
 
-      <GameShell price={price} />
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+        <GameShell price={price} />
+      </div>
     </div>
   );
 }

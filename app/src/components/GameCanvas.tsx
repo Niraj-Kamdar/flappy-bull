@@ -35,6 +35,8 @@ type Props = {
   sessionPhase: GamePhase;
   submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
+  canvasW?: number;
+  canvasH?: number;
 };
 
 type Coin = { x: number; y: number; collected: boolean };
@@ -50,11 +52,11 @@ function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: nu
   return { body: 0x1a3a3a, cap: 0x2a5a5a, edge: 0x4488aa };
 }
 
-export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Props) {
+export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvasW = CANVAS_W, canvasH = CANVAS_H }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // TS game state: phase transitions + cosmetic assists only
-  const tsStateRef = useRef<GameState>(initState(CANVAS_H));
+  const tsStateRef = useRef<GameState>(initState(canvasH));
 
   // WASM authoritative sim state
   const wasmStateRef = useRef<WasmSimState | null>(null);
@@ -95,8 +97,11 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
   // Init wasm on mount
   useEffect(() => {
     initSimCore().then(() => {
-      wasmCfgRef.current = getSimConfig();
-      const mid = (CANVAS_H / 2) * SCALE;
+      const cfg = getSimConfig();
+      cfg.canvas_h_px = canvasH;
+      cfg.canvas_w_px = canvasW;
+      wasmCfgRef.current = cfg;
+      const mid = (canvasH / 2) * SCALE;
       wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
       wasmReadyRef.current = true;
     }).catch((e) => console.error("[DBG] wasm init FAILED", e));
@@ -112,8 +117,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
 
     app
       .init({
-        width: CANVAS_W,
-        height: CANVAS_H,
+        width: canvasW,
+        height: canvasH,
         resolution: window.devicePixelRatio ?? 1,
         autoDensity: true,
         background: "#0a0a14",
@@ -156,7 +161,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           text: "SOL: --",
           style: { fill: "#ffcc00", fontSize: 14, fontFamily: "monospace" },
         });
-        priceText.x = CANVAS_W - 140;
+        priceText.x = canvasW - 140;
         priceText.y = 10;
         app.stage.addChild(priceText);
 
@@ -165,7 +170,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           style: { fill: "#ff4444", fontSize: 28, fontFamily: "monospace", fontWeight: "bold" },
         });
         sirenText.anchor.set(0.5);
-        sirenText.x = CANVAS_W / 2;
+        sirenText.x = canvasW / 2;
         sirenText.y = 60;
         sirenText.visible = false;
         app.stage.addChild(sirenText);
@@ -174,7 +179,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
         app.stage.addChild(overlayContainer);
 
         const overlayBg = new PIXI.Graphics();
-        overlayBg.rect(0, 0, CANVAS_W, CANVAS_H);
+        overlayBg.rect(0, 0, canvasW, canvasH);
         overlayBg.fill({ color: 0x000000, alpha: 0.55 });
         overlayContainer.addChild(overlayBg);
 
@@ -183,8 +188,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           style: { fill: "#ffffff", fontSize: 36, fontFamily: "monospace", fontWeight: "bold" },
         });
         overlayTitle.anchor.set(0.5);
-        overlayTitle.x = CANVAS_W / 2;
-        overlayTitle.y = CANVAS_H / 2 - 20;
+        overlayTitle.x = canvasW / 2;
+        overlayTitle.y = canvasH / 2 - 20;
         overlayContainer.addChild(overlayTitle);
 
         const overlaySubtext = new PIXI.Text({
@@ -192,8 +197,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           style: { fill: "#aaaaaa", fontSize: 20, fontFamily: "monospace" },
         });
         overlaySubtext.anchor.set(0.5);
-        overlaySubtext.x = CANVAS_W / 2;
-        overlaySubtext.y = CANVAS_H / 2 + 30;
+        overlaySubtext.x = canvasW / 2;
+        overlaySubtext.y = canvasH / 2 + 30;
         overlayContainer.addChild(overlaySubtext);
 
         const coins: Coin[] = [];
@@ -214,13 +219,13 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
 
         function drawBg(scrollOffset: number, bgColor: number) {
           bgGraphics.clear();
-          bgGraphics.rect(0, 0, CANVAS_W, CANVAS_H);
+          bgGraphics.rect(0, 0, canvasW, canvasH);
           bgGraphics.fill({ color: bgColor });
           bgGraphics.setStrokeStyle({ width: 1, color: 0x1a1a2e });
           const startX = -(scrollOffset % GRID_SPACING);
-          for (let x = startX; x < CANVAS_W; x += GRID_SPACING) {
+          for (let x = startX; x < canvasW; x += GRID_SPACING) {
             bgGraphics.moveTo(x, 0);
-            bgGraphics.lineTo(x, CANVAS_H);
+            bgGraphics.lineTo(x, canvasH);
           }
           bgGraphics.stroke();
         }
@@ -242,8 +247,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
 
             pipeGraphics.rect(pipe.x - 4, gapBot, PIPE_WIDTH + 8, capH);
             pipeGraphics.fill({ color: cap });
-            if (gapBot + capH < CANVAS_H) {
-              pipeGraphics.rect(pipe.x, gapBot + capH, PIPE_WIDTH, CANVAS_H - gapBot - capH);
+            if (gapBot + capH < canvasH) {
+              pipeGraphics.rect(pipe.x, gapBot + capH, PIPE_WIDTH, canvasH - gapBot - capH);
               pipeGraphics.fill({ color: body });
             }
 
@@ -274,19 +279,19 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           }
 
           // Drain into TS state for phase transitions (IDLE→PLAYING, DEAD→IDLE)
-          tsStateRef.current = applyTap(tsStateRef.current, CANVAS_H);
+          tsStateRef.current = applyTap(tsStateRef.current, canvasH);
           console.log("[DBG] tap:", prev.phase, "->", tsStateRef.current.phase, "sess=", sessPhase, "wasmReady=", wasmReadyRef.current);
 
           if (prev.phase === "DEAD" && tsStateRef.current.phase === "IDLE") {
             // Restart: reset wasm state with price=0 to match on-chain start_run
             if (wasmReadyRef.current && wasmCfgRef.current) {
-              const mid = (CANVAS_H / 2) * SCALE;
+              const mid = (canvasH / 2) * SCALE;
               wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
             }
           } else if (prev.phase === "IDLE" && tsStateRef.current.phase === "PLAYING") {
             // First tap: init wasm with price=0 to match on-chain start_run
             if (wasmReadyRef.current && wasmCfgRef.current) {
-              const mid = (CANVAS_H / 2) * SCALE;
+              const mid = (canvasH / 2) * SCALE;
               wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
             }
           }
@@ -320,8 +325,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
           pendingTapRef.current = false;
 
           // ── WASM authoritative step ──────────────────────────────────────
-          let bullYPx = (CANVAS_H / 2);
-          let channelCenterPx = (CANVAS_H / 2);
+          let bullYPx = (canvasH / 2);
+          let channelCenterPx = (canvasH / 2);
           let wasmScore = 0;
           let wasmAlive = false;
           let tickBeforeStep = 0;
@@ -411,7 +416,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
             if (volatilityState === "BREAKOUT" && prevVolStateRef.current !== "BREAKOUT") {
               for (let i = 0; i < 4; i++) {
                 const spread = (channelHalf - 20) * (2 * Math.random() - 1);
-                coins.push({ x: CANVAS_W + i * 90, y: channelCenterPx + spread, collected: false });
+                coins.push({ x: canvasW + i * 90, y: channelCenterPx + spread, collected: false });
               }
             }
           }
@@ -529,8 +534,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun }: Prop
     <div
       ref={containerRef}
       style={{
-        width: `${CANVAS_W}px`,
-        height: `${CANVAS_H}px`,
+        width: `${canvasW}px`,
+        height: `${canvasH}px`,
         position: "relative",
         cursor: "pointer",
       }}
