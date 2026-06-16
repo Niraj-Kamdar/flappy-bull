@@ -40,7 +40,7 @@ export function Section({
       <section
         id={id}
         className={cn(
-          "mx-auto px-4 py-20 md:py-28",
+          "relative mx-auto px-4 py-16 md:py-24",
           width === "narrow" ? "max-w-3xl" : "max-w-5xl",
           className
         )}

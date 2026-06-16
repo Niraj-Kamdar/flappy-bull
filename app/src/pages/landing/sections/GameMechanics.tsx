@@ -32,7 +32,7 @@ export function GameMechanics() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {cards.map((c) => (
           <ScrollReveal key={c.mode}>
-            <div className={`glass-card border card-hover ${c.glowClass} p-6 h-full`}>
+            <div className={`glass-card border card-hover corner-frame relative ${c.glowClass} p-6 h-full`}>
               <h3 className={`font-mono text-xs tracking-widest font-bold mb-4 ${c.titleColor}`}>
                 {c.mode}
               </h3>

@@ -24,6 +24,8 @@
   --animate-border-flow: border-flow 4s linear infinite;
   --animate-ticker-pulse: ticker-pulse 2.5s ease-in-out infinite;
   --animate-grid-scroll: grid-scroll 12s linear infinite;
+  --animate-marquee: marquee 30s linear infinite;
+  --animate-chart-scroll: chart-scroll 45s linear infinite;
 }
 
 @keyframes float {
@@ -56,6 +58,14 @@
 @keyframes grid-scroll {
   from { background-position: 0 0; }
   to   { background-position: -80px 0; }
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes chart-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
 
 @property --border-angle {
@@ -156,6 +166,46 @@ html { scroll-behavior: smooth; }
     background-size: 80px 80px;
     animation: var(--animate-grid-scroll);
     mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  /* Full-page ambient grid for the body — faint trading-terminal lattice. */
+  .market-grid {
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 47px, rgba(153, 69, 255, 0.045) 48px),
+      repeating-linear-gradient(90deg, transparent, transparent 47px, rgba(153, 69, 255, 0.045) 48px);
+    background-size: 48px 48px;
+    animation: var(--animate-grid-scroll);
+    mask-image: linear-gradient(180deg, transparent, black 18%, black 82%, transparent);
+  }
+
+  /* Arcade-cabinet corner brackets on a card. */
+  .corner-frame::before,
+  .corner-frame::after {
+    content: "";
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-color: var(--color-neon-purple);
+    opacity: 0.55;
+    transition: opacity 0.25s ease, border-color 0.25s ease;
+    pointer-events: none;
+  }
+  .corner-frame::before {
+    top: 8px;
+    left: 8px;
+    border-top: 2px solid;
+    border-left: 2px solid;
+  }
+  .corner-frame::after {
+    bottom: 8px;
+    right: 8px;
+    border-bottom: 2px solid;
+    border-right: 2px solid;
+  }
+  .corner-frame:hover::before,
+  .corner-frame:hover::after {
+    opacity: 1;
+    border-color: var(--color-neon-green);
   }
 }
 

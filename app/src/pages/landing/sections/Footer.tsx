@@ -5,7 +5,7 @@ const PROGRAM_ID = "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ";
 export function Footer() {
   const navigate = useNavigate();
   return (
-    <footer className="py-16 px-4 border-t border-neon-purple/20">
+    <footer className="pt-16 pb-28 md:pb-16 px-4 border-t border-neon-purple/20">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8 text-center">
           <p className="font-heading font-bold text-text-primary text-lg mb-1">Metasquare Studio</p>
@@ -51,9 +51,9 @@ export function Footer() {
           <p className="font-mono text-xs text-background/40 text-text-secondary opacity-50">
             Flappy Bull is a game. It does not constitute financial advice. SOL/USD data used for gameplay only.
           </p>
-          <p className="inline-flex items-center gap-2 font-mono text-xs text-neon-teal/80 bg-surface/60 border border-neon-teal/30 rounded-full px-3 py-1.5">
+          <p className="inline-flex max-w-full flex-wrap items-center justify-center gap-x-2 gap-y-1 font-mono text-[11px] sm:text-xs text-neon-teal/80 bg-surface/60 border border-neon-teal/30 rounded-2xl sm:rounded-full px-3 py-1.5">
             <span className="text-text-secondary">Program</span>
-            {PROGRAM_ID}
+            <span className="break-all">{PROGRAM_ID}</span>
             <span className="text-text-secondary">(devnet)</span>
           </p>
         </div>

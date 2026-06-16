@@ -1,14 +1,26 @@
 import { Section } from "@/components/landing/Section";
 import { ScrollReveal } from "@/components/landing/ScrollReveal";
-import { Badge } from "@/components/ui/badge";
+import { ReplayDiagram } from "@/components/landing/illustrations/ReplayDiagram";
 
-const badges = [
-  "Rust sim-core",
-  "WebAssembly",
-  "Solana SBF",
-  "MagicBlock Ephemeral Rollup",
-  "Pyth Oracle",
-  "Session Keys",
+const steps = [
+  {
+    n: "1",
+    title: "PLAY",
+    desc: "Every tap and every price tick you saw is recorded as you go.",
+    color: "text-neon-green",
+  },
+  {
+    n: "2",
+    title: "REPLAY",
+    desc: "Run ends. The Solana program re-runs your exact inputs on-chain.",
+    color: "text-neon-purple",
+  },
+  {
+    n: "3",
+    title: "SETTLE",
+    desc: "Same Rust core → one true score. A lying client gets rejected.",
+    color: "text-neon-amber",
+  },
 ];
 
 export function TrustlessScoring() {
@@ -16,38 +28,44 @@ export function TrustlessScoring() {
     <Section
       divider
       label="// THE CHAIN DOESN'T LIE"
-      title="You can't fake your score. The blockchain replays your run."
+      title="You can't fake your score."
+      intro={
+        <p>
+          Most on-chain games trust the client. We don't — the blockchain{" "}
+          <span className="text-neon-green font-semibold">replays your run</span> and decides.
+        </p>
+      }
     >
-      <ScrollReveal>
-        <div className="glass-card glow-purple card-hover p-8 mb-8">
-          <div className="font-body text-text-secondary text-base leading-relaxed space-y-4">
-            <p>Most on-chain games trust the client. We don't.</p>
-            <p>
-              Flappy Bull uses a{" "}
-              <span className="text-neon-green font-semibold">single physics engine</span> — written
-              once in Rust — that runs identically in your browser (via WebAssembly) and on the
-              Solana program (via on-chain replay). When your run ends, the on-chain program replays
-              every tap and every price tick you experienced. The score it computes is{" "}
-              <span className="text-neon-green font-semibold">canonical</span>. The client can lie.
-              The chain won't care.
-            </p>
-            <p>
-              Zero wallet prompts during your run. One approval at the start — a throwaway session
-              key handles everything else. No popups. No friction. Just play.
-            </p>
-          </div>
-        </div>
+      <ScrollReveal className="mb-10">
+        <ReplayDiagram />
       </ScrollReveal>
 
-      <div className="flex flex-wrap gap-3">
-        {badges.map((t, i) => (
-          <ScrollReveal key={t} style={{ animationDelay: `${i * 80}ms` }}>
-            <Badge className="font-mono text-xs bg-surface border border-neon-teal/40 text-neon-teal px-3 py-1 transition-all hover:border-neon-teal hover:shadow-[0_0_16px_rgba(0,194,199,0.5)] hover:-translate-y-0.5">
-              {t}
-            </Badge>
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {steps.map((s) => (
+          <ScrollReveal key={s.n}>
+            <div className="glass-card card-hover h-full p-5">
+              <div className={`mb-2 font-pixel text-xs ${s.color}`}>{s.n}</div>
+              <h3 className={`mb-2 font-heading text-sm font-bold tracking-widest ${s.color}`}>
+                {s.title}
+              </h3>
+              <p className="font-body text-sm leading-relaxed text-text-secondary">{s.desc}</p>
+            </div>
           </ScrollReveal>
         ))}
       </div>
+
+      <ScrollReveal>
+        <div className="animated-border card-hover flex flex-col items-center justify-center gap-2 rounded-xl p-5 text-center sm:flex-row sm:gap-4">
+          <span className="font-pixel text-lg text-neon-green">1</span>
+          <span className="font-body text-sm text-text-secondary">
+            signature at the start.
+          </span>
+          <span className="font-pixel text-lg text-neon-amber">0</span>
+          <span className="font-body text-sm text-text-secondary">
+            wallet prompts mid-run — a throwaway session key handles the rest.
+          </span>
+        </div>
+      </ScrollReveal>
     </Section>
   );
 }
