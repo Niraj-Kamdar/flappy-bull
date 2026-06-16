@@ -129,6 +129,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
           return;
         }
         initialized = true;
+        app.canvas.style.touchAction = "none";
         container.appendChild(app.canvas);
 
         const bgGraphics = new PIXI.Graphics();
@@ -538,6 +539,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
         height: `${canvasH}px`,
         position: "relative",
         cursor: "pointer",
+        touchAction: "none",
+        userSelect: "none",
       }}
     />
   );
