@@ -93,6 +93,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
   const pulseCounterRef = useRef(0);
   const sirenFadeRef = useRef(0);
   const prevWasDeadRef = useRef(false);
+  const tapFlashRef = useRef(0);
 
   // Init wasm on mount
   useEffect(() => {
@@ -149,6 +150,9 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
         bullGfx.fill({ color: 0xffcc00 });
         bullGfx.x = BULL_X;
         app.stage.addChild(bullGfx);
+
+        const tapFlashGfx = new PIXI.Graphics();
+        app.stage.addChild(tapFlashGfx);
 
         const scoreText = new PIXI.Text({
           text: "FPS: -- | Score: 0",
@@ -262,6 +266,32 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
             pipeGraphics.moveTo(pipe.x - 4, gapBot + capH);
             pipeGraphics.lineTo(pipe.x + PIPE_WIDTH + 4, gapBot + capH);
             pipeGraphics.stroke();
+
+            if (canvasW < CANVAS_W) {
+              pipeGraphics.setStrokeStyle({ width: 1, color: 0xffffff, alpha: 0.2 });
+              pipeGraphics.moveTo(pipe.x, pipe.gapCenterY);
+              pipeGraphics.lineTo(pipe.x + PIPE_WIDTH, pipe.gapCenterY);
+              pipeGraphics.stroke();
+            }
+          }
+          if (canvasW < CANVAS_W) {
+            let nextPipe: Pipe | null = null;
+            for (const pipe of pipeList) {
+              if (pipe.x > canvasW && (!nextPipe || pipe.x < nextPipe.x)) nextPipe = pipe;
+            }
+            if (nextPipe) {
+              const { edge } = pipeColors(nextPipe.vol);
+              const gapTop = nextPipe.gapCenterY - nextPipe.gapHalf;
+              const gapBot = nextPipe.gapCenterY + nextPipe.gapHalf;
+              if (gapTop > 0) {
+                pipeGraphics.rect(canvasW - 14, 0, 14, gapTop);
+                pipeGraphics.fill({ color: edge, alpha: 0.35 });
+              }
+              if (gapBot < canvasH) {
+                pipeGraphics.rect(canvasW - 14, gapBot, 14, canvasH - gapBot);
+                pipeGraphics.fill({ color: edge, alpha: 0.35 });
+              }
+            }
           }
         }
 
@@ -297,6 +327,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
             }
           }
 
+          tapFlashRef.current = 8;
           pendingTapRef.current = true;
         };
 
@@ -472,6 +503,22 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
           }
 
           bullGfx.y = bullYPx;
+
+          tapFlashGfx.clear();
+          if (tapFlashRef.current > 0) {
+            const t = tapFlashRef.current / 8;
+            const lineLen = 12 * t;
+            const startR = BULL_RADIUS + 3;
+            for (let i = 0; i < 4; i++) {
+              const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+              tapFlashGfx.setStrokeStyle({ width: 2, color: i % 2 === 0 ? 0xffffff : 0xffcc00, alpha: t });
+              tapFlashGfx.moveTo(BULL_X + Math.cos(angle) * startR, bullYPx + Math.sin(angle) * startR);
+              tapFlashGfx.lineTo(BULL_X + Math.cos(angle) * (startR + lineLen), bullYPx + Math.sin(angle) * (startR + lineLen));
+              tapFlashGfx.stroke();
+            }
+            tapFlashRef.current--;
+          }
+
           scoreText.text = `FPS: ${Math.round(app.ticker.FPS)} | Score: ${wasmScore}`;
           const p = effectivePrice(priceRef.current);
           priceText.text = `SOL: $${p.toFixed(2)}`;
