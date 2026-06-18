@@ -1,16 +1,17 @@
-# Flappy Bull — dApp Store Listing Copy
+# Flappy Bull — dApp Store Portal Field Sheet
 
-Paste these into the Publisher Portal (publish.solanamobile.com) when creating the app.
+Fill the Publisher Portal form (publish.solanamobile.com) with the values below.
+✅ = ready in repo · ⚠️ = you must provide.
 
-- **App name:** Flappy Bull
-- **Package name:** `app.netlify.flappy_bull.twa` (auto-detected from the APK)
-- **Category:** Games
-- **Publisher:** Metasquare Studio
-- **Website:** https://flappy-bull.netlify.app
-- **Short description (≤30 chars):** The SOL chart is the course
-- **Tagline:** Tap to survive the live SOL/USD price channel.
+## dApp details
+| Field | Value |
+|---|---|
+| **dApp Name** (≤25) | `Flappy Bull` |
+| **Package Name** | `app.netlify.flappy_bull.twa` (auto-detected from APK) |
+| **Subtitle** (≤50) | `Survive the live SOL/USD price channel` |
+| **Description** | see block below |
 
-**Long description:**
+**Description:**
 ```
 Flappy Bull turns the live SOL/USD chart into an arcade obstacle course. Tap
 to fly the bull through the gap between price candles — the market decides
@@ -27,13 +28,33 @@ Spectate live runs, climb the Hall of Degens, and dethrone the bull whisperers.
 Not financial advice. SOL/USD data used for gameplay only.
 ```
 
-**What's new (first release):**
-```
-First release of Flappy Bull on the Solana dApp Store — fly the bull through
-the live SOL price channel and claim your spot on the on-chain leaderboard.
-```
-
 ## Media (in `seeker/media/`)
-- `icon-512.png` — app icon (512×512)
-- `feature.png` — feature graphic (1200×600)
-- `screenshots/01-landing.png`, `02-gameplay.png`, `03-liquidated.png`, `04-leaderboard.png`, `05-studio.png` (1080×2400)
+| Field | File |
+|---|---|
+| **dApp Icon** 512×512 ✅ | `media/icon-512.png` |
+| **Banner** 1200×600 ✅ | `media/feature.png` |
+| **dApp Preview** (min 4, all 1080×2400) ✅ | `media/screenshots/01-landing.png`, `02-gameplay.png`, `03-liquidated.png`, `04-leaderboard.png`, `05-studio.png` |
+
+## Editor's Choice (optional)
+| Field | Value |
+|---|---|
+| **Headline** (≤50) | `Fly the bull through the live SOL chart.` |
+| **Graphic** 1200×1200 ✅ | `media/graphic.png` |
+
+## More info
+| Field | Value |
+|---|---|
+| **Languages** | English |
+| **Countries** | All countries |
+| **App Website** | `https://flappy-bull.netlify.app` |
+| **Contact Email** ⚠️ | _your email_ |
+| **Support Email** ⚠️ | _your email_ |
+
+## Compliance
+| Field | Value |
+|---|---|
+| **Terms of Use** ✅ | `https://flappy-bull.netlify.app/terms.html` |
+| **Privacy Policy** ✅ | `https://flappy-bull.netlify.app/privacy.html` |
+
+---
+Then upload the signed APK via the CLI — see `SUBMIT.md`.
