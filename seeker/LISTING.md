@@ -36,4 +36,4 @@ the live SOL price channel and claim your spot on the on-chain leaderboard.
 ## Media (in `seeker/media/`)
 - `icon-512.png` — app icon (512×512)
 - `feature.png` — feature graphic (1200×600)
-- `screenshots/01-landing.png`, `02-gameplay.png`, `03-leaderboard.png`, `04-studio.png` (1080×2400)
+- `screenshots/01-landing.png`, `02-gameplay.png`, `03-liquidated.png`, `04-leaderboard.png`, `05-studio.png` (1080×2400)
