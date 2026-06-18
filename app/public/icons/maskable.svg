@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="mbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A0A22"/>
+      <stop offset="100%" stop-color="#050510"/>
+    </linearGradient>
+  </defs>
+
+  <!-- full-bleed bg so the OS mask sees brand color edge to edge -->
+  <rect width="1024" height="1024" fill="url(#mbg)"/>
+
+  <!-- bull disc sized to fill the ~80% maskable safe zone -->
+  <circle cx="512" cy="512" r="330" fill="#0D0D2B" stroke="#F5A623" stroke-width="24"/>
+  <g transform="translate(512 512) scale(1.72) translate(-512 -512)">
+    <g fill="#F8F5E3">
+      <path d="M 392 452 C 360 408 372 372 410 366 C 404 392 416 420 444 442 Z"/>
+      <path d="M 632 452 C 664 408 652 372 614 366 C 620 392 608 420 580 442 Z"/>
+      <path d="M 512 432 C 446 432 410 476 410 536 C 410 596 456 632 512 632 C 568 632 614 596 614 536 C 614 476 578 432 512 432 Z"/>
+    </g>
+    <g fill="#0D0D2B">
+      <ellipse cx="512" cy="586" rx="46" ry="30"/>
+      <circle cx="476" cy="520" r="13"/>
+      <circle cx="548" cy="520" r="13"/>
+      <circle cx="498" cy="592" r="7"/>
+      <circle cx="526" cy="592" r="7"/>
+    </g>
+  </g>
+</svg>

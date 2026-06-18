@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A0A22"/>
+      <stop offset="100%" stop-color="#050510"/>
+    </linearGradient>
+    <linearGradient id="channel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#14F195" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#9945FF" stop-opacity="0.10"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+
+  <!-- playable channel gap -->
+  <path d="M 0 360 L 1024 320 L 1024 700 L 0 660 Z" fill="url(#channel)"/>
+
+  <!-- candle pipes: top hangs down, bottom rises up, leaving the center gap -->
+  <g>
+    <!-- col 1 (green) -->
+    <rect x="96"  y="0"   width="64" height="300" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="124" y="300" width="8"  height="48"  fill="#14F195"/>
+    <rect x="96"  y="720" width="64" height="304" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="124" y="676" width="8"  height="44"  fill="#14F195"/>
+    <!-- col 2 (red volatility) -->
+    <rect x="248" y="0"   width="64" height="260" rx="10" fill="#FF3B5C" opacity="0.92"/>
+    <rect x="276" y="260" width="8"  height="44"  fill="#FF3B5C"/>
+    <rect x="248" y="760" width="64" height="264" rx="10" fill="#FF3B5C" opacity="0.92"/>
+    <rect x="276" y="716" width="8"  height="44"  fill="#FF3B5C"/>
+    <!-- col 4 (green) -->
+    <rect x="712" y="0"   width="64" height="280" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="740" y="280" width="8"  height="44"  fill="#14F195"/>
+    <rect x="712" y="744" width="64" height="280" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="740" y="700" width="8"  height="44"  fill="#14F195"/>
+    <!-- col 5 (green) -->
+    <rect x="864" y="0"   width="64" height="320" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="892" y="320" width="8"  height="44"  fill="#14F195"/>
+    <rect x="864" y="704" width="64" height="320" rx="10" fill="#14F195" opacity="0.92"/>
+    <rect x="892" y="660" width="8"  height="44"  fill="#14F195"/>
+  </g>
+
+  <!-- bull disc -->
+  <circle cx="512" cy="512" r="190" fill="#0D0D2B" stroke="#F5A623" stroke-width="14"/>
+  <!-- bull head glyph -->
+  <g fill="#F8F5E3">
+    <!-- horns -->
+    <path d="M 392 452 C 360 408 372 372 410 366 C 404 392 416 420 444 442 Z"/>
+    <path d="M 632 452 C 664 408 652 372 614 366 C 620 392 608 420 580 442 Z"/>
+    <!-- head -->
+    <path d="M 512 432 C 446 432 410 476 410 536 C 410 596 456 632 512 632 C 568 632 614 596 614 536 C 614 476 578 432 512 432 Z"/>
+  </g>
+  <!-- snout + eyes punched dark -->
+  <g fill="#0D0D2B">
+    <ellipse cx="512" cy="586" rx="46" ry="30"/>
+    <circle cx="476" cy="520" r="13"/>
+    <circle cx="548" cy="520" r="13"/>
+  </g>
+  <g fill="#0D0D2B">
+    <circle cx="498" cy="592" r="7"/>
+    <circle cx="526" cy="592" r="7"/>
+  </g>
+</svg>
