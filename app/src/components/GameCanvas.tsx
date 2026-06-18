@@ -151,6 +151,21 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
     }).catch((e) => console.error("[DBG] wasm init FAILED", e));
   }, []);
 
+  // Play Again restarts the session (DEAD → PLAYING) without touching the
+  // canvas. Reset the stale DEAD TS state to IDLE so the overlay flips from
+  // "LIQUIDATED" to "TAP TO FLY" immediately, instead of requiring a throwaway
+  // tap to clear it.
+  useEffect(() => {
+    if (sessionPhase === "PLAYING" && tsStateRef.current.phase === "DEAD") {
+      tsStateRef.current = initState(canvasH);
+      finishCalledRef.current = false;
+      if (wasmReadyRef.current && wasmCfgRef.current) {
+        const mid = (canvasH / 2) * SCALE;
+        wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
+      }
+    }
+  }, [sessionPhase, canvasH]);
+
   // Apply roomConfig changes to WASM cfg (e.g. when startNewGame completes)
   useEffect(() => {
     const cfg = wasmCfgRef.current;
