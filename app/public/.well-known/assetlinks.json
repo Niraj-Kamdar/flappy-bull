@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.netlify.flappy_bull.twa",
+        "sha256_cert_fingerprints": ["A3:65:1F:EE:E2:E7:62:22:0E:2C:E1:77:4D:84:68:01:ED:59:A3:1F:BB:D0:07:D1:15:07:4C:EE:D9:0E:69:47"]
+      }
+    }]
