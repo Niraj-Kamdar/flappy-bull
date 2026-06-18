@@ -1,25 +1,24 @@
 {
-  "packageId": "app.flappybull.twa",
+  "packageId": "app.netlify.flappy_bull.twa",
   "host": "flappy-bull.netlify.app",
   "name": "Flappy Bull",
   "launcherName": "Flappy Bull",
   "display": "standalone",
-  "orientation": "portrait",
   "themeColor": "#050510",
-  "themeColorDark": "#050510",
-  "navigationColor": "#050510",
-  "navigationColorDark": "#050510",
-  "navigationDividerColor": "#050510",
-  "navigationDividerColorDark": "#050510",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
   "backgroundColor": "#050510",
-  "enableNotifications": false,
+  "enableNotifications": true,
   "startUrl": "/",
   "iconUrl": "https://flappy-bull.netlify.app/icons/icon-512.png",
   "maskableIconUrl": "https://flappy-bull.netlify.app/icons/maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
-    "path": "./android.keystore",
-    "alias": "flappybull"
+    "path": "/Users/niraj/Documents/Projects/magicblock/flappy-bull/seeker/android.keystore",
+    "alias": "android"
   },
   "appVersionName": "1",
   "appVersionCode": 1,
@@ -28,13 +27,25 @@
   "webManifestUrl": "https://flappy-bull.netlify.app/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
   "fullScopeUrl": "https://flappy-bull.netlify.app/",
-  "minSdkVersion": 23,
-  "orientationLockEnabled": true,
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [
+    {
+      "value": "A3:65:1F:EE:E2:E7:62:22:0E:2C:E1:77:4D:84:68:01:ED:59:A3:1F:BB:D0:07:D1:15:07:4C:EE:D9:0E:69:47"
+    }
+  ],
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
-  "appVersion": "1.0.0"
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
 }

@@ -1,0 +1,15 @@
+# Signing secrets — never commit
+*.keystore
+android.keystore
+
+# Build artifacts
+*.apk
+*.aab
+*.idsig
+app/build/
+build/
+.gradle/
+
+# Backups / local
+*.bak
+twa-manifest.handwritten.json.bak
