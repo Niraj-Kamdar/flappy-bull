@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 600" width="1200" height="600">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0A0A22"/>
+      <stop offset="100%" stop-color="#050510"/>
+    </linearGradient>
+    <linearGradient id="chan" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#14F195" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#9945FF" stop-opacity="0.08"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="600" fill="url(#bg)"/>
+
+  <!-- candle channel band across -->
+  <path d="M 0 250 L 1200 215 L 1200 400 L 0 365 Z" fill="url(#chan)"/>
+  <g>
+    <rect x="60"   y="0"   width="40" height="210" rx="6" fill="#14F195" opacity="0.85"/>
+    <rect x="60"   y="405" width="40" height="195" rx="6" fill="#14F195" opacity="0.85"/>
+    <rect x="150"  y="0"   width="40" height="180" rx="6" fill="#FF3B5C" opacity="0.85"/>
+    <rect x="150"  y="430" width="40" height="170" rx="6" fill="#FF3B5C" opacity="0.85"/>
+    <rect x="1010" y="0"   width="40" height="195" rx="6" fill="#14F195" opacity="0.85"/>
+    <rect x="1010" y="420" width="40" height="180" rx="6" fill="#14F195" opacity="0.85"/>
+    <rect x="1100" y="0"   width="40" height="230" rx="6" fill="#14F195" opacity="0.85"/>
+    <rect x="1100" y="395" width="40" height="205" rx="6" fill="#14F195" opacity="0.85"/>
+  </g>
+
+  <!-- bull disc -->
+  <circle cx="300" cy="305" r="120" fill="#0D0D2B" stroke="#F5A623" stroke-width="9"/>
+  <g transform="translate(300 305) scale(0.62) translate(-512 -512)">
+    <g fill="#F8F5E3">
+      <path d="M 392 452 C 360 408 372 372 410 366 C 404 392 416 420 444 442 Z"/>
+      <path d="M 632 452 C 664 408 652 372 614 366 C 620 392 608 420 580 442 Z"/>
+      <path d="M 512 432 C 446 432 410 476 410 536 C 410 596 456 632 512 632 C 568 632 614 596 614 536 C 614 476 578 432 512 432 Z"/>
+    </g>
+    <g fill="#0D0D2B">
+      <ellipse cx="512" cy="586" rx="46" ry="30"/>
+      <circle cx="476" cy="520" r="13"/><circle cx="548" cy="520" r="13"/>
+      <circle cx="498" cy="592" r="7"/><circle cx="526" cy="592" r="7"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="470" y="285" font-family="'Press Start 2P', monospace" font-size="64" font-weight="700" fill="#9945FF">FLAPPY</text>
+  <text x="470" y="360" font-family="'Press Start 2P', monospace" font-size="64" font-weight="700" fill="#14F195">BULL</text>
+  <text x="472" y="415" font-family="monospace" font-size="26" fill="#C7C7D9">The SOL chart IS the course.</text>
+</svg>
