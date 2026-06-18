@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
-use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
+use ephemeral_rollups_sdk::ephem::commit_and_undelegate_accounts;
 use sim_core::{
     init_state, is_alive, step, SeasonConfig as SimConfig, SimState as SimCoreState,
 };
@@ -365,14 +365,18 @@ pub mod flappy_bull {
         // Flush updated state to the account buffer before committing.
         gs.try_serialize(&mut &mut session_info.data.borrow_mut()[..])?;
 
-        // Commit updated state to base layer and undelegate.
-        MagicIntentBundleBuilder::new(
-            ctx.accounts.payer.to_account_info(),
-            ctx.accounts.magic_context.to_account_info(),
-            ctx.accounts.magic_program.to_account_info(),
-        )
-        .commit_and_undelegate(&[session_info.clone()])
-        .build_and_invoke()?;
+        // Commit updated state to base layer and undelegate. Use the legacy
+        // ScheduleCommitAndUndelegate instruction (MagicBlockInstruction variant 2)
+        // via the free function rather than MagicIntentBundleBuilder: the Magic
+        // program on the devnet ER predates ScheduleIntentBundle (variant 11) and
+        // rejects the bundle with "invalid instruction data".
+        commit_and_undelegate_accounts(
+            &ctx.accounts.payer.to_account_info(),
+            vec![&session_info],
+            &ctx.accounts.magic_context.to_account_info(),
+            &ctx.accounts.magic_program.to_account_info(),
+            None,
+        )?;
 
         msg!(
             "Run finished: score={}, tap_count={}, final_tick={}",
