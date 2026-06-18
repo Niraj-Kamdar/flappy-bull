@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "build": "anchor build",
-    "deploy": "anchor deploy --provider.cluster devnet",
+    "build:program": "cargo build-sbf --arch v3 --manifest-path programs/flappy-bull/Cargo.toml",
+    "deploy": "bash scripts/deploy-devnet.sh",
+    "init": "node scripts/init-program.mjs",
     "test": "anchor test --provider.cluster devnet",
     "dev": "cd app && npm run dev",
     "copy-idl": "cp target/idl/flappy_bull.json app/src/idl/flappy_bull.json"
