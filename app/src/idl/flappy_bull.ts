@@ -7,7 +7,7 @@
 export type FlappyBull = {
   "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
   "metadata": {
-    "name": "flappyBull",
+    "name": "flappy_bull",
     "version": "0.1.0",
     "spec": "0.1.0",
     "description": "Flappy Bull game session program"
@@ -35,7 +35,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "bufferGameSession",
+          "name": "buffer_game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -52,50 +52,50 @@ export type FlappyBull = {
               },
               {
                 "kind": "account",
-                "path": "gameSession"
+                "path": "game_session"
               }
             ],
             "program": {
               "kind": "const",
               "value": [
-                63,
+                56,
+                185,
+                7,
+                107,
+                191,
+                9,
+                110,
+                77,
+                150,
+                133,
+                217,
                 230,
-                25,
-                136,
-                229,
-                147,
-                122,
-                103,
-                88,
-                194,
-                105,
-                67,
-                244,
+                192,
+                152,
                 236,
-                54,
-                230,
-                239,
-                6,
-                254,
-                207,
-                190,
-                66,
-                132,
-                79,
-                231,
-                247,
-                210,
+                157,
+                17,
+                107,
+                99,
+                237,
+                150,
+                17,
+                186,
+                200,
+                176,
+                102,
+                95,
                 148,
-                233,
-                1,
-                112,
-                31
+                47,
+                40,
+                94,
+                198
               ]
             }
           }
         },
         {
-          "name": "delegationRecordGameSession",
+          "name": "delegation_record_game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -116,17 +116,17 @@ export type FlappyBull = {
               },
               {
                 "kind": "account",
-                "path": "gameSession"
+                "path": "game_session"
               }
             ],
             "program": {
               "kind": "account",
-              "path": "delegationProgram"
+              "path": "delegation_program"
             }
           }
         },
         {
-          "name": "delegationMetadataGameSession",
+          "name": "delegation_metadata_game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -156,17 +156,17 @@ export type FlappyBull = {
               },
               {
                 "kind": "account",
-                "path": "gameSession"
+                "path": "game_session"
               }
             ],
             "program": {
               "kind": "account",
-              "path": "delegationProgram"
+              "path": "delegation_program"
             }
           }
         },
         {
-          "name": "gameSession",
+          "name": "game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -190,22 +190,22 @@ export type FlappyBull = {
           }
         },
         {
-          "name": "ownerProgram",
+          "name": "owner_program",
           "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
         },
         {
-          "name": "delegationProgram",
+          "name": "delegation_program",
           "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
         },
         {
-          "name": "systemProgram",
+          "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "finishRun",
+      "name": "finish_run",
       "docs": [
         "ER instruction: commit the current sim state + undelegate, freeing the PDA.",
         "",
@@ -237,7 +237,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "gameSession",
+          "name": "game_session",
           "docs": [
             "Anchor re-serializing after commit_and_undelegate reassigns ownership.",
             "The PDA is verified against its recorded player in the handler."
@@ -245,11 +245,11 @@ export type FlappyBull = {
           "writable": true
         },
         {
-          "name": "magicProgram",
+          "name": "magic_program",
           "address": "Magic11111111111111111111111111111111111111"
         },
         {
-          "name": "magicContext",
+          "name": "magic_context",
           "writable": true,
           "address": "MagicContext1111111111111111111111111111111"
         }
@@ -257,7 +257,7 @@ export type FlappyBull = {
       "args": []
     },
     {
-      "name": "initLeaderboard",
+      "name": "init_leaderboard",
       "docs": [
         "Admin: create the Leaderboard PDA (empty top-10)."
       ],
@@ -293,14 +293,14 @@ export type FlappyBull = {
           }
         },
         {
-          "name": "systemProgram",
+          "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "initRoom",
+      "name": "init_room",
       "docs": [
         "Admin: create or update a per-room SeasonParams PDA."
       ],
@@ -321,31 +321,31 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "seasonParams",
+          "name": "season_params",
           "writable": true
         },
         {
-          "name": "systemProgram",
+          "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "roomId",
+          "name": "room_id",
           "type": "u8"
         },
         {
           "name": "config",
           "type": {
             "defined": {
-              "name": "seasonConfig"
+              "name": "SeasonConfig"
             }
           }
         }
       ]
     },
     {
-      "name": "initSeason",
+      "name": "init_season",
       "docs": [
         "Admin: create the SeasonParams PDA with default physics."
       ],
@@ -366,7 +366,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "seasonParams",
+          "name": "season_params",
           "writable": true,
           "pda": {
             "seeds": [
@@ -385,14 +385,14 @@ export type FlappyBull = {
           }
         },
         {
-          "name": "systemProgram",
+          "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
     },
     {
-      "name": "processUndelegation",
+      "name": "process_undelegation",
       "discriminator": [
         196,
         28,
@@ -405,7 +405,7 @@ export type FlappyBull = {
       ],
       "accounts": [
         {
-          "name": "baseAccount",
+          "name": "base_account",
           "writable": true
         },
         {
@@ -416,12 +416,12 @@ export type FlappyBull = {
           "writable": true
         },
         {
-          "name": "systemProgram"
+          "name": "system_program"
         }
       ],
       "args": [
         {
-          "name": "accountSeeds",
+          "name": "account_seeds",
           "type": {
             "vec": "bytes"
           }
@@ -429,7 +429,7 @@ export type FlappyBull = {
       ]
     },
     {
-      "name": "startRun",
+      "name": "start_run",
       "docs": [
         "Player creates/resets a GameSession with a fresh sim state."
       ],
@@ -450,7 +450,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "gameSession",
+          "name": "game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -474,26 +474,26 @@ export type FlappyBull = {
           }
         },
         {
-          "name": "seasonParams"
+          "name": "season_params"
         },
         {
-          "name": "systemProgram",
+          "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
         {
-          "name": "sessionKey",
+          "name": "session_key",
           "type": "pubkey"
         },
         {
-          "name": "roomId",
+          "name": "room_id",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "submitTaps",
+      "name": "submit_taps",
       "docs": [
         "ER instruction: advance sim_state by a batch of ticks.",
         "",
@@ -530,7 +530,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "gameSession",
+          "name": "game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -549,18 +549,18 @@ export type FlappyBull = {
               {
                 "kind": "account",
                 "path": "game_session.player",
-                "account": "gameSession"
+                "account": "GameSession"
               }
             ]
           }
         },
         {
-          "name": "seasonParams"
+          "name": "season_params"
         }
       ],
       "args": [
         {
-          "name": "startTick",
+          "name": "start_tick",
           "type": "u32"
         },
         {
@@ -578,7 +578,7 @@ export type FlappyBull = {
       ]
     },
     {
-      "name": "updateLeaderboard",
+      "name": "update_leaderboard",
       "docs": [
         "Base-layer instruction: verify finished run and insert into leaderboard."
       ],
@@ -599,7 +599,7 @@ export type FlappyBull = {
           "signer": true
         },
         {
-          "name": "gameSession",
+          "name": "game_session",
           "writable": true,
           "pda": {
             "seeds": [
@@ -643,7 +643,7 @@ export type FlappyBull = {
   ],
   "accounts": [
     {
-      "name": "gameSession",
+      "name": "GameSession",
       "discriminator": [
         150,
         116,
@@ -656,7 +656,7 @@ export type FlappyBull = {
       ]
     },
     {
-      "name": "leaderboard",
+      "name": "Leaderboard",
       "discriminator": [
         247,
         186,
@@ -669,7 +669,7 @@ export type FlappyBull = {
       ]
     },
     {
-      "name": "seasonParams",
+      "name": "SeasonParams",
       "discriminator": [
         77,
         88,
@@ -685,48 +685,48 @@ export type FlappyBull = {
   "errors": [
     {
       "code": 6000,
-      "name": "unauthorized",
+      "name": "Unauthorized",
       "msg": "Only the session key may submit taps"
     },
     {
       "code": 6001,
-      "name": "outOfOrder",
+      "name": "OutOfOrder",
       "msg": "Input tick must equal the current sim tick (strict-nonce ordering)"
     },
     {
       "code": 6002,
-      "name": "bullDead",
+      "name": "BullDead",
       "msg": "Bull is already dead"
     },
     {
       "code": 6003,
-      "name": "runNotFinished",
+      "name": "RunNotFinished",
       "msg": "Run must be finished (bull dead) before updating leaderboard"
     },
     {
       "code": 6004,
-      "name": "alreadySettled",
+      "name": "AlreadySettled",
       "msg": "This run has already been settled"
     },
     {
       "code": 6005,
-      "name": "noTapsSubmitted",
+      "name": "NoTapsSubmitted",
       "msg": "Must submit at least one tap"
     },
     {
       "code": 6006,
-      "name": "scoreExceedsTick",
+      "name": "ScoreExceedsTick",
       "msg": "Score cannot exceed tick count"
     },
     {
       "code": 6007,
-      "name": "badBatch",
+      "name": "BadBatch",
       "msg": "Batch must be non-empty with matching tap and price lengths"
     }
   ],
   "types": [
     {
-      "name": "gameSession",
+      "name": "GameSession",
       "type": {
         "kind": "struct",
         "fields": [
@@ -735,19 +735,19 @@ export type FlappyBull = {
             "type": "pubkey"
           },
           {
-            "name": "sessionKey",
+            "name": "session_key",
             "type": "pubkey"
           },
           {
-            "name": "roomId",
+            "name": "room_id",
             "type": "u8"
           },
           {
-            "name": "startSlot",
+            "name": "start_slot",
             "type": "u64"
           },
           {
-            "name": "tapCount",
+            "name": "tap_count",
             "type": "u32"
           },
           {
@@ -759,10 +759,10 @@ export type FlappyBull = {
             "type": "bool"
           },
           {
-            "name": "simState",
+            "name": "sim_state",
             "type": {
               "defined": {
-                "name": "simState"
+                "name": "SimState"
               }
             }
           }
@@ -770,7 +770,7 @@ export type FlappyBull = {
       }
     },
     {
-      "name": "leaderboard",
+      "name": "Leaderboard",
       "type": {
         "kind": "struct",
         "fields": [
@@ -800,7 +800,7 @@ export type FlappyBull = {
       }
     },
     {
-      "name": "seasonConfig",
+      "name": "SeasonConfig",
       "docs": [
         "Physics config — mirrors sim_core::SeasonConfig field-for-field."
       ],
@@ -812,15 +812,15 @@ export type FlappyBull = {
             "type": "i32"
           },
           {
-            "name": "tapBoost",
+            "name": "tap_boost",
             "type": "i32"
           },
           {
-            "name": "maxUpVel",
+            "name": "max_up_vel",
             "type": "i32"
           },
           {
-            "name": "maxVelY",
+            "name": "max_vel_y",
             "type": "i32"
           },
           {
@@ -828,55 +828,55 @@ export type FlappyBull = {
             "type": "i32"
           },
           {
-            "name": "canvasHPx",
+            "name": "canvas_h_px",
             "type": "i32"
           },
           {
-            "name": "bullRadiusPx",
+            "name": "bull_radius_px",
             "type": "i32"
           },
           {
-            "name": "channelHalfMin",
+            "name": "channel_half_min",
             "type": "i32"
           },
           {
-            "name": "lerpNumBase",
+            "name": "lerp_num_base",
             "type": "i32"
           },
           {
-            "name": "lerpDen",
+            "name": "lerp_den",
             "type": "i32"
           },
           {
-            "name": "lerpNumFast",
+            "name": "lerp_num_fast",
             "type": "i32"
           },
           {
-            "name": "canvasWPx",
+            "name": "canvas_w_px",
             "type": "i32"
           },
           {
-            "name": "bullXPx",
+            "name": "bull_x_px",
             "type": "i32"
           },
           {
-            "name": "pipeWidthPx",
+            "name": "pipe_width_px",
             "type": "i32"
           },
           {
-            "name": "pipeScroll",
+            "name": "pipe_scroll",
             "type": "i32"
           },
           {
-            "name": "pipeSpacingPx",
+            "name": "pipe_spacing_px",
             "type": "i32"
           },
           {
-            "name": "priceVelFastThresh",
+            "name": "price_vel_fast_thresh",
             "type": "i64"
           },
           {
-            "name": "priceFracScale",
+            "name": "price_frac_scale",
             "type": "i64"
           },
           {
@@ -884,7 +884,7 @@ export type FlappyBull = {
             "type": "u8"
           },
           {
-            "name": "pad",
+            "name": "_pad",
             "type": {
               "array": [
                 "u8",
@@ -896,7 +896,7 @@ export type FlappyBull = {
       }
     },
     {
-      "name": "seasonParams",
+      "name": "SeasonParams",
       "type": {
         "kind": "struct",
         "fields": [
@@ -908,7 +908,7 @@ export type FlappyBull = {
             "name": "physics",
             "type": {
               "defined": {
-                "name": "seasonConfig"
+                "name": "SeasonConfig"
               }
             }
           }
@@ -916,7 +916,7 @@ export type FlappyBull = {
       }
     },
     {
-      "name": "simState",
+      "name": "SimState",
       "docs": [
         "Fixed-point sim state — mirrors sim_core::SimState field-for-field."
       ],
@@ -924,15 +924,15 @@ export type FlappyBull = {
         "kind": "struct",
         "fields": [
           {
-            "name": "bullY",
+            "name": "bull_y",
             "type": "i32"
           },
           {
-            "name": "velY",
+            "name": "vel_y",
             "type": "i32"
           },
           {
-            "name": "channelCenter",
+            "name": "channel_center",
             "type": "i32"
           },
           {
@@ -952,7 +952,7 @@ export type FlappyBull = {
             "type": "u32"
           },
           {
-            "name": "pipeX",
+            "name": "pipe_x",
             "type": {
               "array": [
                 "i32",
@@ -961,7 +961,7 @@ export type FlappyBull = {
             }
           },
           {
-            "name": "pipeGap",
+            "name": "pipe_gap",
             "type": {
               "array": [
                 "i32",
