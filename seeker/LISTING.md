@@ -47,8 +47,8 @@ Not financial advice. SOL/USD data used for gameplay only.
 | **Languages** | English |
 | **Countries** | All countries |
 | **App Website** | `https://flappy-bull.netlify.app` |
-| **Contact Email** ⚠️ | _your email_ |
-| **Support Email** ⚠️ | _your email_ |
+| **Contact Email** | `nirajkamdar01@gmail.com` |
+| **Support Email** | `nirajkamdar01@gmail.com` |
 
 ## Compliance
 | Field | Value |
