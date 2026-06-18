@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-flappy_bull = "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ"
+flappy_bull = "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
 
 [provider]
 cluster = "devnet"

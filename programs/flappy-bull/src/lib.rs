@@ -6,7 +6,7 @@ use sim_core::{
     init_state, is_alive, step, SeasonConfig as SimConfig, SimState as SimCoreState,
 };
 
-declare_id!("5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ");
+declare_id!("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
 
 // ── Newtype wrappers for sim-core types ─────────────────────────────────────
 // sim-core is wasm-first (no anchor-lang). Wrappers let us serialize for PDAs
@@ -160,7 +160,7 @@ impl SeasonParams {
 pub struct GameSession {
     pub player: Pubkey,
     pub session_key: Pubkey,
-    pub season: u8,
+    pub room_id: u8,
     pub start_slot: u64,
     pub tap_count: u32,
     pub alive: bool,
@@ -200,6 +200,15 @@ pub mod flappy_bull {
         Ok(())
     }
 
+    /// Admin: create or update a per-room SeasonParams PDA.
+    pub fn init_room(ctx: Context<InitRoom>, room_id: u8, config: SeasonConfig) -> Result<()> {
+        let s = &mut ctx.accounts.season_params;
+        s.authority = ctx.accounts.authority.key();
+        s.physics = config;
+        msg!("Room {} initialized", room_id);
+        Ok(())
+    }
+
     /// Admin: create the Leaderboard PDA (empty top-10).
     pub fn init_leaderboard(ctx: Context<InitLeaderboard>) -> Result<()> {
         let lb = &mut ctx.accounts.leaderboard;
@@ -211,7 +220,7 @@ pub mod flappy_bull {
     }
 
     /// Player creates/resets a GameSession with a fresh sim state.
-    pub fn start_run(ctx: Context<StartRun>, session_key: Pubkey) -> Result<()> {
+    pub fn start_run(ctx: Context<StartRun>, session_key: Pubkey, room_id: u8) -> Result<()> {
         let gs = &mut ctx.accounts.game_session;
         let cfg: SimConfig = ctx.accounts.season_params.physics.into();
         let price = gs.sim_state.price;
@@ -219,7 +228,7 @@ pub mod flappy_bull {
 
         gs.player = ctx.accounts.player.key();
         gs.session_key = session_key;
-        gs.season = cfg.season;
+        gs.room_id = room_id;
         gs.start_slot = Clock::get()?.slot;
         gs.tap_count = 0;
         gs.alive = true;
@@ -445,6 +454,22 @@ pub struct InitSeason<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(room_id: u8)]
+pub struct InitRoom<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = SeasonParams::SPACE,
+        seeds = [b"season".as_ref(), &[room_id]],
+        bump
+    )]
+    pub season_params: Account<'info, SeasonParams>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct InitLeaderboard<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -460,6 +485,7 @@ pub struct InitLeaderboard<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(session_key: Pubkey, room_id: u8)]
 pub struct StartRun<'info> {
     #[account(mut)]
     pub player: Signer<'info>,
@@ -472,7 +498,7 @@ pub struct StartRun<'info> {
     )]
     pub game_session: Account<'info, GameSession>,
     #[account(
-        seeds = [b"season"],
+        seeds = [b"season".as_ref(), &[room_id]],
         bump,
     )]
     pub season_params: Account<'info, SeasonParams>,
@@ -505,7 +531,7 @@ pub struct SubmitTaps<'info> {
     )]
     pub game_session: Account<'info, GameSession>,
     #[account(
-        seeds = [b"season"],
+        seeds = [b"season".as_ref(), &[game_session.room_id]],
         bump,
     )]
     pub season_params: Account<'info, SeasonParams>,
@@ -521,11 +547,6 @@ pub struct FinishRun<'info> {
     /// The PDA is verified against its recorded player in the handler.
     #[account(mut)]
     pub game_session: UncheckedAccount<'info>,
-    #[account(
-        seeds = [b"season"],
-        bump,
-    )]
-    pub season_params: Account<'info, SeasonParams>,
 }
 
 #[derive(Accounts)]

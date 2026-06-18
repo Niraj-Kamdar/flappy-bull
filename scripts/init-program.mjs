@@ -12,7 +12,8 @@
 // Usage: node scripts/init-program.mjs
 
 import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
-import { Program, AnchorProvider, BN } from "@coral-xyz/anchor";
+import anchorPkg from "@coral-xyz/anchor";
+const { Program, AnchorProvider, BN } = anchorPkg;
 import { readFileSync } from "fs";
 import { homedir } from "os";
 

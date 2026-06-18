@@ -1,5 +1,5 @@
 {
-  "address": "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ",
+  "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
   "metadata": {
     "name": "flappy_bull",
     "version": "0.1.0",
@@ -185,7 +185,7 @@
         },
         {
           "name": "owner_program",
-          "address": "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ"
+          "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
         },
         {
           "name": "delegation_program",
@@ -237,24 +237,6 @@
             "The PDA is verified against its recorded player in the handler."
           ],
           "writable": true
-        },
-        {
-          "name": "season_params",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  101,
-                  97,
-                  115,
-                  111,
-                  110
-                ]
-              }
-            ]
-          }
         },
         {
           "name": "magic_program",
@@ -310,6 +292,51 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "init_room",
+      "docs": [
+        "Admin: create or update a per-room SeasonParams PDA."
+      ],
+      "discriminator": [
+        166,
+        102,
+        103,
+        49,
+        179,
+        136,
+        136,
+        113
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "season_params",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "room_id",
+          "type": "u8"
+        },
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "SeasonConfig"
+            }
+          }
+        }
+      ]
     },
     {
       "name": "init_season",
@@ -441,22 +468,7 @@
           }
         },
         {
-          "name": "season_params",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  101,
-                  97,
-                  115,
-                  111,
-                  110
-                ]
-              }
-            ]
-          }
+          "name": "season_params"
         },
         {
           "name": "system_program",
@@ -467,6 +479,10 @@
         {
           "name": "session_key",
           "type": "pubkey"
+        },
+        {
+          "name": "room_id",
+          "type": "u8"
         }
       ]
     },
@@ -533,22 +549,7 @@
           }
         },
         {
-          "name": "season_params",
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  101,
-                  97,
-                  115,
-                  111,
-                  110
-                ]
-              }
-            ]
-          }
+          "name": "season_params"
         }
       ],
       "args": [
@@ -732,7 +733,7 @@
             "type": "pubkey"
           },
           {
-            "name": "season",
+            "name": "room_id",
             "type": "u8"
           },
           {

@@ -5,41 +5,59 @@
  * IDL can be found at `target/idl/flappy_bull.json`.
  */
 export type FlappyBull = {
-  address: "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ";
-  metadata: {
-    name: "flappy_bull";
-    version: "0.1.0";
-    spec: "0.1.0";
-    description: "Flappy Bull game session program";
-  };
-  instructions: [
+  "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
+  "metadata": {
+    "name": "flappyBull",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Flappy Bull game session program"
+  },
+  "instructions": [
     {
-      name: "delegate";
-      docs: ["Delegate the GameSession PDA to the ER (existing pattern)."];
-      discriminator: [90, 147, 75, 178, 85, 88, 4, 137];
-      accounts: [
+      "name": "delegate",
+      "docs": [
+        "Delegate the GameSession PDA to the ER (existing pattern)."
+      ],
+      "discriminator": [
+        90,
+        147,
+        75,
+        178,
+        85,
+        88,
+        4,
+        137
+      ],
+      "accounts": [
         {
-          name: "payer";
-          writable: true;
-          signer: true;
+          "name": "payer",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "buffer_game_session";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "bufferGameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [98, 117, 102, 102, 101, 114];
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
               },
               {
-                kind: "account";
-                path: "game_session";
-              },
-            ];
-            program: {
-              kind: "const";
-              value: [
+                "kind": "account",
+                "path": "gameSession"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
                 63,
                 230,
                 25,
@@ -71,39 +89,50 @@ export type FlappyBull = {
                 233,
                 1,
                 112,
-                31,
-              ];
-            };
-          };
+                31
+              ]
+            }
+          }
         },
         {
-          name: "delegation_record_game_session";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "delegationRecordGameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [100, 101, 108, 101, 103, 97, 116, 105, 111, 110];
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
               },
               {
-                kind: "account";
-                path: "game_session";
-              },
-            ];
-            program: {
-              kind: "account";
-              path: "delegation_program";
-            };
-          };
+                "kind": "account",
+                "path": "gameSession"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegationProgram"
+            }
+          }
         },
         {
-          name: "delegation_metadata_game_session";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "delegationMetadataGameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [
+                "kind": "const",
+                "value": [
                   100,
                   101,
                   108,
@@ -122,54 +151,62 @@ export type FlappyBull = {
                   100,
                   97,
                   116,
-                  97,
-                ];
+                  97
+                ]
               },
               {
-                kind: "account";
-                path: "game_session";
-              },
-            ];
-            program: {
-              kind: "account";
-              path: "delegation_program";
-            };
-          };
+                "kind": "account",
+                "path": "gameSession"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegationProgram"
+            }
+          }
         },
         {
-          name: "game_session";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "gameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [115, 101, 115, 115, 105, 111, 110];
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
               },
               {
-                kind: "account";
-                path: "payer";
-              },
-            ];
-          };
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
         },
         {
-          name: "owner_program";
-          address: "5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ";
+          "name": "ownerProgram",
+          "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
         },
         {
-          name: "delegation_program";
-          address: "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh";
+          "name": "delegationProgram",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
         },
         {
-          name: "system_program";
-          address: "11111111111111111111111111111111";
-        },
-      ];
-      args: [];
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
-      name: "finish_run";
-      docs: [
+      "name": "finishRun",
+      "docs": [
         "ER instruction: commit the current sim state + undelegate, freeing the PDA.",
         "",
         "Commits the *real* applied state as-is — no forward-sim guess. Whatever",
@@ -181,184 +218,283 @@ export type FlappyBull = {
         "never locks.",
         "",
         "No `require!(!alive)` guard: an alive session must still be finalizable or",
-        "its PDA locks forever. We mark it not-alive here so it can settle.",
-      ];
-      discriminator: [125, 146, 243, 213, 56, 220, 214, 25];
-      accounts: [
+        "its PDA locks forever. We mark it not-alive here so it can settle."
+      ],
+      "discriminator": [
+        125,
+        146,
+        243,
+        213,
+        56,
+        220,
+        214,
+        25
+      ],
+      "accounts": [
         {
-          name: "payer";
-          writable: true;
-          signer: true;
+          "name": "payer",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "game_session";
-          docs: [
+          "name": "gameSession",
+          "docs": [
             "Anchor re-serializing after commit_and_undelegate reassigns ownership.",
-            "The PDA is verified against its recorded player in the handler.",
-          ];
-          writable: true;
+            "The PDA is verified against its recorded player in the handler."
+          ],
+          "writable": true
         },
         {
-          name: "season_params";
-          pda: {
-            seeds: [
-              {
-                kind: "const";
-                value: [115, 101, 97, 115, 111, 110];
-              },
-            ];
-          };
+          "name": "magicProgram",
+          "address": "Magic11111111111111111111111111111111111111"
         },
         {
-          name: "magic_program";
-          address: "Magic11111111111111111111111111111111111111";
-        },
-        {
-          name: "magic_context";
-          writable: true;
-          address: "MagicContext1111111111111111111111111111111";
-        },
-      ];
-      args: [];
+          "name": "magicContext",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
-      name: "init_leaderboard";
-      docs: ["Admin: create the Leaderboard PDA (empty top-10)."];
-      discriminator: [70, 179, 5, 151, 152, 16, 47, 15];
-      accounts: [
+      "name": "initLeaderboard",
+      "docs": [
+        "Admin: create the Leaderboard PDA (empty top-10)."
+      ],
+      "discriminator": [
+        70,
+        179,
+        5,
+        151,
+        152,
+        16,
+        47,
+        15
+      ],
+      "accounts": [
         {
-          name: "authority";
-          writable: true;
-          signer: true;
+          "name": "authority",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "leaderboard";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "leaderboard",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [108, 98];
-              },
-            ];
-          };
+                "kind": "const",
+                "value": [
+                  108,
+                  98
+                ]
+              }
+            ]
+          }
         },
         {
-          name: "system_program";
-          address: "11111111111111111111111111111111";
-        },
-      ];
-      args: [];
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
-      name: "init_season";
-      docs: ["Admin: create the SeasonParams PDA with default physics."];
-      discriminator: [179, 47, 101, 197, 114, 97, 174, 98];
-      accounts: [
+      "name": "initRoom",
+      "docs": [
+        "Admin: create or update a per-room SeasonParams PDA."
+      ],
+      "discriminator": [
+        166,
+        102,
+        103,
+        49,
+        179,
+        136,
+        136,
+        113
+      ],
+      "accounts": [
         {
-          name: "authority";
-          writable: true;
-          signer: true;
+          "name": "authority",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "season_params";
-          writable: true;
-          pda: {
-            seeds: [
-              {
-                kind: "const";
-                value: [115, 101, 97, 115, 111, 110];
-              },
-            ];
-          };
+          "name": "seasonParams",
+          "writable": true
         },
         {
-          name: "system_program";
-          address: "11111111111111111111111111111111";
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "roomId",
+          "type": "u8"
         },
-      ];
-      args: [];
+        {
+          "name": "config",
+          "type": {
+            "defined": {
+              "name": "seasonConfig"
+            }
+          }
+        }
+      ]
     },
     {
-      name: "process_undelegation";
-      discriminator: [196, 28, 41, 206, 48, 37, 51, 167];
-      accounts: [
+      "name": "initSeason",
+      "docs": [
+        "Admin: create the SeasonParams PDA with default physics."
+      ],
+      "discriminator": [
+        179,
+        47,
+        101,
+        197,
+        114,
+        97,
+        174,
+        98
+      ],
+      "accounts": [
         {
-          name: "base_account";
-          writable: true;
+          "name": "authority",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "buffer";
+          "name": "seasonParams",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  97,
+                  115,
+                  111,
+                  110
+                ]
+              }
+            ]
+          }
         },
         {
-          name: "payer";
-          writable: true;
-        },
-        {
-          name: "system_program";
-        },
-      ];
-      args: [
-        {
-          name: "account_seeds";
-          type: {
-            vec: "bytes";
-          };
-        },
-      ];
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
-      name: "start_run";
-      docs: ["Player creates/resets a GameSession with a fresh sim state."];
-      discriminator: [72, 212, 1, 91, 61, 186, 2, 52];
-      accounts: [
+      "name": "processUndelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
         {
-          name: "player";
-          writable: true;
-          signer: true;
+          "name": "baseAccount",
+          "writable": true
         },
         {
-          name: "game_session";
-          writable: true;
-          pda: {
-            seeds: [
-              {
-                kind: "const";
-                value: [115, 101, 115, 115, 105, 111, 110];
-              },
-              {
-                kind: "account";
-                path: "player";
-              },
-            ];
-          };
+          "name": "buffer"
         },
         {
-          name: "season_params";
-          pda: {
-            seeds: [
-              {
-                kind: "const";
-                value: [115, 101, 97, 115, 111, 110];
-              },
-            ];
-          };
+          "name": "payer",
+          "writable": true
         },
         {
-          name: "system_program";
-          address: "11111111111111111111111111111111";
-        },
-      ];
-      args: [
+          "name": "systemProgram"
+        }
+      ],
+      "args": [
         {
-          name: "session_key";
-          type: "pubkey";
-        },
-      ];
+          "name": "accountSeeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
     },
     {
-      name: "submit_taps";
-      docs: [
+      "name": "startRun",
+      "docs": [
+        "Player creates/resets a GameSession with a fresh sim state."
+      ],
+      "discriminator": [
+        72,
+        212,
+        1,
+        91,
+        61,
+        186,
+        2,
+        52
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "gameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "seasonParams"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "sessionKey",
+          "type": "pubkey"
+        },
+        {
+          "name": "roomId",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "submitTaps",
+      "docs": [
         "ER instruction: advance sim_state by a batch of ticks.",
         "",
         "Batch-streamed application: a batch covers ticks `[start_tick ..",
@@ -375,395 +511,466 @@ export type FlappyBull = {
         "Each input carries its tap-time price, so network lag delays the input",
         "and its price together — they stay aligned regardless of when the tx",
         "lands. The client `step()` and this `step()` are bit-identical, so the",
-        "committed trajectory matches the client's.",
-      ];
-      discriminator: [136, 226, 222, 173, 237, 63, 94, 102];
-      accounts: [
+        "committed trajectory matches the client's."
+      ],
+      "discriminator": [
+        136,
+        226,
+        222,
+        173,
+        237,
+        63,
+        94,
+        102
+      ],
+      "accounts": [
         {
-          name: "authority";
-          writable: true;
-          signer: true;
+          "name": "authority",
+          "writable": true,
+          "signer": true
         },
         {
-          name: "game_session";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "gameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [115, 101, 115, 115, 105, 111, 110];
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
               },
               {
-                kind: "account";
-                path: "game_session.player";
-                account: "GameSession";
-              },
-            ];
-          };
+                "kind": "account",
+                "path": "game_session.player",
+                "account": "gameSession"
+              }
+            ]
+          }
         },
         {
-          name: "season_params";
-          pda: {
-            seeds: [
+          "name": "seasonParams"
+        }
+      ],
+      "args": [
+        {
+          "name": "startTick",
+          "type": "u32"
+        },
+        {
+          "name": "taps",
+          "type": {
+            "vec": "bool"
+          }
+        },
+        {
+          "name": "prices",
+          "type": {
+            "vec": "i64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "updateLeaderboard",
+      "docs": [
+        "Base-layer instruction: verify finished run and insert into leaderboard."
+      ],
+      "discriminator": [
+        72,
+        95,
+        102,
+        32,
+        118,
+        158,
+        247,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "gameSession",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [115, 101, 97, 115, 111, 110];
-              },
-            ];
-          };
-        },
-      ];
-      args: [
-        {
-          name: "start_tick";
-          type: "u32";
-        },
-        {
-          name: "taps";
-          type: {
-            vec: "bool";
-          };
-        },
-        {
-          name: "prices";
-          type: {
-            vec: "i64";
-          };
-        },
-      ];
-    },
-    {
-      name: "update_leaderboard";
-      docs: [
-        "Base-layer instruction: verify finished run and insert into leaderboard.",
-      ];
-      discriminator: [72, 95, 102, 32, 118, 158, 247, 34];
-      accounts: [
-        {
-          name: "player";
-          writable: true;
-          signer: true;
-        },
-        {
-          name: "game_session";
-          writable: true;
-          pda: {
-            seeds: [
-              {
-                kind: "const";
-                value: [115, 101, 115, 115, 105, 111, 110];
+                "kind": "const",
+                "value": [
+                  115,
+                  101,
+                  115,
+                  115,
+                  105,
+                  111,
+                  110
+                ]
               },
               {
-                kind: "account";
-                path: "player";
-              },
-            ];
-          };
+                "kind": "account",
+                "path": "player"
+              }
+            ]
+          }
         },
         {
-          name: "leaderboard";
-          writable: true;
-          pda: {
-            seeds: [
+          "name": "leaderboard",
+          "writable": true,
+          "pda": {
+            "seeds": [
               {
-                kind: "const";
-                value: [108, 98];
-              },
-            ];
-          };
-        },
-      ];
-      args: [];
-    },
-  ];
-  accounts: [
+                "kind": "const",
+                "value": [
+                  108,
+                  98
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    }
+  ],
+  "accounts": [
     {
-      name: "GameSession";
-      discriminator: [150, 116, 20, 197, 205, 121, 220, 240];
-    },
-    {
-      name: "Leaderboard";
-      discriminator: [247, 186, 238, 243, 194, 30, 9, 36];
-    },
-    {
-      name: "SeasonParams";
-      discriminator: [77, 88, 56, 124, 184, 182, 53, 155];
-    },
-  ];
-  errors: [
-    {
-      code: 6000;
-      name: "Unauthorized";
-      msg: "Only the session key may submit taps";
+      "name": "gameSession",
+      "discriminator": [
+        150,
+        116,
+        20,
+        197,
+        205,
+        121,
+        220,
+        240
+      ]
     },
     {
-      code: 6001;
-      name: "OutOfOrder";
-      msg: "Input tick must equal the current sim tick (strict-nonce ordering)";
+      "name": "leaderboard",
+      "discriminator": [
+        247,
+        186,
+        238,
+        243,
+        194,
+        30,
+        9,
+        36
+      ]
     },
     {
-      code: 6002;
-      name: "BullDead";
-      msg: "Bull is already dead";
+      "name": "seasonParams",
+      "discriminator": [
+        77,
+        88,
+        56,
+        124,
+        184,
+        182,
+        53,
+        155
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "unauthorized",
+      "msg": "Only the session key may submit taps"
     },
     {
-      code: 6003;
-      name: "RunNotFinished";
-      msg: "Run must be finished (bull dead) before updating leaderboard";
+      "code": 6001,
+      "name": "outOfOrder",
+      "msg": "Input tick must equal the current sim tick (strict-nonce ordering)"
     },
     {
-      code: 6004;
-      name: "AlreadySettled";
-      msg: "This run has already been settled";
+      "code": 6002,
+      "name": "bullDead",
+      "msg": "Bull is already dead"
     },
     {
-      code: 6005;
-      name: "NoTapsSubmitted";
-      msg: "Must submit at least one tap";
+      "code": 6003,
+      "name": "runNotFinished",
+      "msg": "Run must be finished (bull dead) before updating leaderboard"
     },
     {
-      code: 6006;
-      name: "ScoreExceedsTick";
-      msg: "Score cannot exceed tick count";
+      "code": 6004,
+      "name": "alreadySettled",
+      "msg": "This run has already been settled"
     },
     {
-      code: 6007;
-      name: "BadBatch";
-      msg: "Batch must be non-empty with matching tap and price lengths";
-    },
-  ];
-  types: [
-    {
-      name: "GameSession";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "player";
-            type: "pubkey";
-          },
-          {
-            name: "session_key";
-            type: "pubkey";
-          },
-          {
-            name: "season";
-            type: "u8";
-          },
-          {
-            name: "start_slot";
-            type: "u64";
-          },
-          {
-            name: "tap_count";
-            type: "u32";
-          },
-          {
-            name: "alive";
-            type: "bool";
-          },
-          {
-            name: "settled";
-            type: "bool";
-          },
-          {
-            name: "sim_state";
-            type: {
-              defined: {
-                name: "SimState";
-              };
-            };
-          },
-        ];
-      };
+      "code": 6005,
+      "name": "noTapsSubmitted",
+      "msg": "Must submit at least one tap"
     },
     {
-      name: "Leaderboard";
-      type: {
-        kind: "struct";
-        fields: [
-          {
-            name: "players";
-            type: {
-              array: ["pubkey", 10];
-            };
-          },
-          {
-            name: "scores";
-            type: {
-              array: ["u32", 10];
-            };
-          },
-          {
-            name: "count";
-            type: "u8";
-          },
-        ];
-      };
+      "code": 6006,
+      "name": "scoreExceedsTick",
+      "msg": "Score cannot exceed tick count"
     },
     {
-      name: "SeasonConfig";
-      docs: [
-        "Physics config — mirrors sim_core::SeasonConfig field-for-field.",
-      ];
-      type: {
-        kind: "struct";
-        fields: [
+      "code": 6007,
+      "name": "badBatch",
+      "msg": "Batch must be non-empty with matching tap and price lengths"
+    }
+  ],
+  "types": [
+    {
+      "name": "gameSession",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            name: "gravity";
-            type: "i32";
+            "name": "player",
+            "type": "pubkey"
           },
           {
-            name: "tap_boost";
-            type: "i32";
+            "name": "sessionKey",
+            "type": "pubkey"
           },
           {
-            name: "max_up_vel";
-            type: "i32";
+            "name": "roomId",
+            "type": "u8"
           },
           {
-            name: "max_vel_y";
-            type: "i32";
+            "name": "startSlot",
+            "type": "u64"
           },
           {
-            name: "scale";
-            type: "i32";
+            "name": "tapCount",
+            "type": "u32"
           },
           {
-            name: "canvas_h_px";
-            type: "i32";
+            "name": "alive",
+            "type": "bool"
           },
           {
-            name: "bull_radius_px";
-            type: "i32";
+            "name": "settled",
+            "type": "bool"
           },
           {
-            name: "channel_half_min";
-            type: "i32";
-          },
-          {
-            name: "lerp_num_base";
-            type: "i32";
-          },
-          {
-            name: "lerp_den";
-            type: "i32";
-          },
-          {
-            name: "lerp_num_fast";
-            type: "i32";
-          },
-          {
-            name: "canvas_w_px";
-            type: "i32";
-          },
-          {
-            name: "bull_x_px";
-            type: "i32";
-          },
-          {
-            name: "pipe_width_px";
-            type: "i32";
-          },
-          {
-            name: "pipe_scroll";
-            type: "i32";
-          },
-          {
-            name: "pipe_spacing_px";
-            type: "i32";
-          },
-          {
-            name: "price_vel_fast_thresh";
-            type: "i64";
-          },
-          {
-            name: "price_frac_scale";
-            type: "i64";
-          },
-          {
-            name: "season";
-            type: "u8";
-          },
-          {
-            name: "_pad";
-            type: {
-              array: ["u8", 3];
-            };
-          },
-        ];
-      };
+            "name": "simState",
+            "type": {
+              "defined": {
+                "name": "simState"
+              }
+            }
+          }
+        ]
+      }
     },
     {
-      name: "SeasonParams";
-      type: {
-        kind: "struct";
-        fields: [
+      "name": "leaderboard",
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            name: "authority";
-            type: "pubkey";
+            "name": "players",
+            "type": {
+              "array": [
+                "pubkey",
+                10
+              ]
+            }
           },
           {
-            name: "physics";
-            type: {
-              defined: {
-                name: "SeasonConfig";
-              };
-            };
+            "name": "scores",
+            "type": {
+              "array": [
+                "u32",
+                10
+              ]
+            }
           },
-        ];
-      };
+          {
+            "name": "count",
+            "type": "u8"
+          }
+        ]
+      }
     },
     {
-      name: "SimState";
-      docs: [
-        "Fixed-point sim state — mirrors sim_core::SimState field-for-field.",
-      ];
-      type: {
-        kind: "struct";
-        fields: [
+      "name": "seasonConfig",
+      "docs": [
+        "Physics config — mirrors sim_core::SeasonConfig field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
           {
-            name: "bull_y";
-            type: "i32";
+            "name": "gravity",
+            "type": "i32"
           },
           {
-            name: "vel_y";
-            type: "i32";
+            "name": "tapBoost",
+            "type": "i32"
           },
           {
-            name: "channel_center";
-            type: "i32";
+            "name": "maxUpVel",
+            "type": "i32"
           },
           {
-            name: "tick";
-            type: "u32";
+            "name": "maxVelY",
+            "type": "i32"
           },
           {
-            name: "score";
-            type: "u32";
+            "name": "scale",
+            "type": "i32"
           },
           {
-            name: "price";
-            type: "i64";
+            "name": "canvasHPx",
+            "type": "i32"
           },
           {
-            name: "flags";
-            type: "u32";
+            "name": "bullRadiusPx",
+            "type": "i32"
           },
           {
-            name: "pipe_x";
-            type: {
-              array: ["i32", 4];
-            };
+            "name": "channelHalfMin",
+            "type": "i32"
           },
           {
-            name: "pipe_gap";
-            type: {
-              array: ["i32", 4];
-            };
+            "name": "lerpNumBase",
+            "type": "i32"
           },
-        ];
-      };
+          {
+            "name": "lerpDen",
+            "type": "i32"
+          },
+          {
+            "name": "lerpNumFast",
+            "type": "i32"
+          },
+          {
+            "name": "canvasWPx",
+            "type": "i32"
+          },
+          {
+            "name": "bullXPx",
+            "type": "i32"
+          },
+          {
+            "name": "pipeWidthPx",
+            "type": "i32"
+          },
+          {
+            "name": "pipeScroll",
+            "type": "i32"
+          },
+          {
+            "name": "pipeSpacingPx",
+            "type": "i32"
+          },
+          {
+            "name": "priceVelFastThresh",
+            "type": "i64"
+          },
+          {
+            "name": "priceFracScale",
+            "type": "i64"
+          },
+          {
+            "name": "season",
+            "type": "u8"
+          },
+          {
+            "name": "pad",
+            "type": {
+              "array": [
+                "u8",
+                3
+              ]
+            }
+          }
+        ]
+      }
     },
-  ];
+    {
+      "name": "seasonParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "physics",
+            "type": {
+              "defined": {
+                "name": "seasonConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "simState",
+      "docs": [
+        "Fixed-point sim state — mirrors sim_core::SimState field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bullY",
+            "type": "i32"
+          },
+          {
+            "name": "velY",
+            "type": "i32"
+          },
+          {
+            "name": "channelCenter",
+            "type": "i32"
+          },
+          {
+            "name": "tick",
+            "type": "u32"
+          },
+          {
+            "name": "score",
+            "type": "u32"
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "flags",
+            "type": "u32"
+          },
+          {
+            "name": "pipeX",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
+          },
+          {
+            "name": "pipeGap",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
 };

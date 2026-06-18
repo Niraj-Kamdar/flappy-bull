@@ -68,6 +68,7 @@ export function GameShell({ price }: Props) {
           sessionPhase={session.phase}
           submitFrame={session.submitFrame}
           finishRun={session.finishRun}
+          roomConfig={session.roomConfig}
         />
 
         {showStart && (

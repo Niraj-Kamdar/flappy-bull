@@ -28,7 +28,7 @@ import {
   effectivePrice,
 } from "../game/simCore";
 import { usePriceChannel, PriceChannelState, VolatilityState } from "../hooks/usePriceChannel";
-import type { GamePhase } from "../hooks/useGameSession";
+import type { GamePhase, RoomConfig } from "../hooks/useGameSession";
 
 type Props = {
   price: number | null;
@@ -37,7 +37,37 @@ type Props = {
   finishRun: () => Promise<void>;
   canvasW?: number;
   canvasH?: number;
+  roomConfig?: RoomConfig | null;
 };
+
+function applyRoomConfigToWasm(cfg: WasmSeasonConfig, rc: RoomConfig) {
+  cfg.gravity = rc.gravity;
+  cfg.tap_boost = rc.tapBoost;
+  cfg.max_up_vel = rc.maxUpVel;
+  cfg.max_vel_y = rc.maxVelY;
+  cfg.scale = rc.scale;
+  cfg.canvas_h_px = rc.canvasHPx;
+  cfg.canvas_w_px = rc.canvasWPx;
+  cfg.bull_x_px = rc.bullXPx;
+  cfg.bull_radius_px = rc.bullRadiusPx;
+  cfg.pipe_width_px = rc.pipeWidthPx;
+  cfg.pipe_scroll = rc.pipeScroll;
+  cfg.pipe_spacing_px = rc.pipeSpacingPx;
+  cfg.channel_half_min = rc.channelHalfMin;
+  cfg.lerp_num_base = rc.lerpNumBase;
+  cfg.lerp_den = rc.lerpDen;
+  cfg.lerp_num_fast = rc.lerpNumFast;
+  const thresh = typeof rc.priceVelFastThresh?.toNumber === "function"
+    ? rc.priceVelFastThresh.toNumber()
+    : Number(rc.priceVelFastThresh);
+  cfg.price_vel_fast_thresh_lo = thresh >>> 0;
+  cfg.price_vel_fast_thresh_hi = Math.floor(thresh / 0x100000000);
+  const frac = typeof rc.priceFracScale?.toNumber === "function"
+    ? rc.priceFracScale.toNumber()
+    : Number(rc.priceFracScale);
+  cfg.price_frac_scale_lo = frac >>> 0;
+  cfg.price_frac_scale_hi = Math.floor(frac / 0x100000000);
+}
 
 type Coin = { x: number; y: number; collected: boolean };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: number };
@@ -52,7 +82,7 @@ function pipeColors(vol: VolatilityState): { body: number; cap: number; edge: nu
   return { body: 0x1a3a3a, cap: 0x2a5a5a, edge: 0x4488aa };
 }
 
-export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvasW = CANVAS_W, canvasH = CANVAS_H }: Props) {
+export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvasW = CANVAS_W, canvasH = CANVAS_H, roomConfig }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // TS game state: phase transitions + cosmetic assists only
@@ -86,6 +116,11 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
   // Track if we already called finishRun for current run
   const finishCalledRef = useRef(false);
 
+  const roomConfigRef = useRef(roomConfig);
+  roomConfigRef.current = roomConfig;
+  const bullXRef = useRef(BULL_X);
+  const bullRadiusRef = useRef(BULL_RADIUS);
+
   const pendingTapRef = useRef(false);
   const pendingAssistRef = useRef<"rocket" | "parachute" | null>(null);
   const prevVolStateRef = useRef<VolatilityState>("NORMAL");
@@ -94,19 +129,41 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
   const sirenFadeRef = useRef(0);
   const prevWasDeadRef = useRef(false);
   const tapFlashRef = useRef(0);
+  const bullTrailRef = useRef<number[]>([]);
 
   // Init wasm on mount
   useEffect(() => {
     initSimCore().then(() => {
       const cfg = getSimConfig();
-      cfg.canvas_h_px = canvasH;
-      cfg.canvas_w_px = canvasW;
+      const rc = roomConfigRef.current;
+      if (rc) {
+        applyRoomConfigToWasm(cfg, rc);
+        bullXRef.current = rc.bullXPx;
+        bullRadiusRef.current = rc.bullRadiusPx;
+      } else {
+        cfg.canvas_h_px = canvasH;
+        cfg.canvas_w_px = CANVAS_W;
+      }
       wasmCfgRef.current = cfg;
       const mid = (canvasH / 2) * SCALE;
       wasmStateRef.current = wasm_init_state(mid, mid, 0, 0);
       wasmReadyRef.current = true;
     }).catch((e) => console.error("[DBG] wasm init FAILED", e));
   }, []);
+
+  // Apply roomConfig changes to WASM cfg (e.g. when startNewGame completes)
+  useEffect(() => {
+    const cfg = wasmCfgRef.current;
+    if (!cfg) return;
+    if (roomConfig) {
+      applyRoomConfigToWasm(cfg, roomConfig);
+      bullXRef.current = roomConfig.bullXPx;
+      bullRadiusRef.current = roomConfig.bullRadiusPx;
+    } else {
+      cfg.canvas_h_px = canvasH;
+      cfg.canvas_w_px = CANVAS_W;
+    }
+  }, [roomConfig]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -274,25 +331,6 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
               pipeGraphics.stroke();
             }
           }
-          if (canvasW < CANVAS_W) {
-            let nextPipe: Pipe | null = null;
-            for (const pipe of pipeList) {
-              if (pipe.x > canvasW && (!nextPipe || pipe.x < nextPipe.x)) nextPipe = pipe;
-            }
-            if (nextPipe) {
-              const { edge } = pipeColors(nextPipe.vol);
-              const gapTop = nextPipe.gapCenterY - nextPipe.gapHalf;
-              const gapBot = nextPipe.gapCenterY + nextPipe.gapHalf;
-              if (gapTop > 0) {
-                pipeGraphics.rect(canvasW - 14, 0, 14, gapTop);
-                pipeGraphics.fill({ color: edge, alpha: 0.35 });
-              }
-              if (gapBot < canvasH) {
-                pipeGraphics.rect(canvasW - 14, gapBot, 14, canvasH - gapBot);
-                pipeGraphics.fill({ color: edge, alpha: 0.35 });
-              }
-            }
-          }
         }
 
         const onTap = () => {
@@ -327,7 +365,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
             }
           }
 
-          tapFlashRef.current = 8;
+          tapFlashRef.current = 10;
           pendingTapRef.current = true;
         };
 
@@ -424,7 +462,7 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
               if (assistType === "rocket") {
                 for (let i = 0; i < 12; i++) {
                   const angle = (i / 12) * Math.PI * 2;
-                  particles.push({ x: BULL_X, y: bullYPx, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4, life: 1.0, color: 0x00ff88 });
+                  particles.push({ x: bullXRef.current, y: bullYPx, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4, life: 1.0, color: 0x00ff88 });
                 }
               }
               if (assistType === "parachute") {
@@ -460,8 +498,8 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
             c.x -= SCROLL_SPEED;
             if (
               tsPhase === "PLAYING" &&
-              Math.abs(c.x - BULL_X) < BULL_RADIUS * 2 &&
-              Math.abs(c.y - bullYPx) < BULL_RADIUS * 2
+              Math.abs(c.x - bullXRef.current) < bullRadiusRef.current * 2 &&
+              Math.abs(c.y - bullYPx) < bullRadiusRef.current * 2
             ) {
               c.collected = true;
             }
@@ -503,17 +541,35 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
           }
 
           bullGfx.y = bullYPx;
+          bullGfx.x = bullXRef.current;
+
+          // Motion trail
+          const trail = bullTrailRef.current;
+          if (tsStateRef.current.phase === "PLAYING") {
+            trail.push(bullYPx);
+            if (trail.length > 6) trail.shift();
+          } else {
+            trail.length = 0;
+          }
 
           tapFlashGfx.clear();
+          // Draw trail dots behind the bull
+          for (let i = 0; i < trail.length - 1; i++) {
+            const alpha = (i / trail.length) * 0.5;
+            const r = bullRadiusRef.current * 0.6 * (i / trail.length);
+            tapFlashGfx.circle(bullXRef.current, trail[i], r);
+            tapFlashGfx.fill({ color: 0xffcc00, alpha });
+          }
+          // Draw burst on tap
           if (tapFlashRef.current > 0) {
-            const t = tapFlashRef.current / 8;
-            const lineLen = 12 * t;
-            const startR = BULL_RADIUS + 3;
-            for (let i = 0; i < 4; i++) {
-              const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
-              tapFlashGfx.setStrokeStyle({ width: 2, color: i % 2 === 0 ? 0xffffff : 0xffcc00, alpha: t });
-              tapFlashGfx.moveTo(BULL_X + Math.cos(angle) * startR, bullYPx + Math.sin(angle) * startR);
-              tapFlashGfx.lineTo(BULL_X + Math.cos(angle) * (startR + lineLen), bullYPx + Math.sin(angle) * (startR + lineLen));
+            const t = tapFlashRef.current / 10;
+            const lineLen = 20 * t;
+            const startR = bullRadiusRef.current + 4;
+            for (let i = 0; i < 6; i++) {
+              const angle = (i / 6) * Math.PI * 2;
+              tapFlashGfx.setStrokeStyle({ width: 2.5, color: i % 2 === 0 ? 0xffffff : 0xffcc00, alpha: t * 0.9 });
+              tapFlashGfx.moveTo(bullXRef.current + Math.cos(angle) * startR, bullYPx + Math.sin(angle) * startR);
+              tapFlashGfx.lineTo(bullXRef.current + Math.cos(angle) * (startR + lineLen), bullYPx + Math.sin(angle) * (startR + lineLen));
               tapFlashGfx.stroke();
             }
             tapFlashRef.current--;

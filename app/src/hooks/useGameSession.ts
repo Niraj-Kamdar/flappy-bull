@@ -11,13 +11,8 @@ import {
 } from "../lib/connections";
 import idlJson from "../idl/flappy_bull.json";
 
-const PROGRAM_ID = new PublicKey("5JSBorB2EgNM2edr8iAvqh3tHkAVQk5HnAGRYMNjj4XQ");
+const PROGRAM_ID = new PublicKey("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
 
-// Pre-computed constants for hot-path instruction building (use web APIs — Buffer unavailable at module init time)
-const SEASON_PDA = PublicKey.findProgramAddressSync(
-  [new TextEncoder().encode("season")],
-  PROGRAM_ID
-)[0];
 // sha256("global:submit_taps")[0..8]
 const SUBMIT_TAPS_DISC = new Uint8Array([136, 226, 222, 173, 237, 63, 94, 102]);
 
@@ -33,7 +28,42 @@ const OFF_ALIVE = 85;
 const OFF_TICK = 99;
 const OFF_SCORE = 103;
 
+// ── Room helpers ──────────────────────────────────────────────────────────
+
+function getRoomId(): number {
+  return window.innerWidth < window.innerHeight ? 1 : 0;
+}
+
+function getRoomPda(roomId: number): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("season"), Buffer.from([roomId])],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
+
+export type RoomConfig = {
+  gravity: number;
+  tapBoost: number;
+  maxUpVel: number;
+  maxVelY: number;
+  scale: number;
+  canvasHPx: number;
+  canvasWPx: number;
+  bullXPx: number;
+  bullRadiusPx: number;
+  pipeWidthPx: number;
+  pipeScroll: number;
+  pipeSpacingPx: number;
+  channelHalfMin: number;
+  lerpNumBase: number;
+  lerpDen: number;
+  lerpNumFast: number;
+  priceVelFastThresh: any;
+  priceFracScale: any;
+};
 
 export type GamePhase =
   | "IDLE"
@@ -65,6 +95,7 @@ export type GameSessionHook = {
   gameState: GameState | null;
   leaderboard: LeaderboardEntry[];
   error: string | null;
+  roomConfig: RoomConfig | null;
   startNewGame: () => Promise<void>;
   submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
@@ -76,14 +107,6 @@ export type GameSessionHook = {
 function getSessionPda(player: PublicKey): PublicKey {
   const [pda] = PublicKey.findProgramAddressSync(
     [Buffer.from("session"), player.toBuffer()],
-    PROGRAM_ID
-  );
-  return pda;
-}
-
-function getSeasonPda(): PublicKey {
-  const [pda] = PublicKey.findProgramAddressSync(
-    [Buffer.from("season")],
     PROGRAM_ID
   );
   return pda;
@@ -197,6 +220,10 @@ export function useGameSession(): GameSessionHook {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [roomConfig, setRoomConfig] = useState<RoomConfig | null>(null);
+
+  // Season PDA for current room (updated in startNewGame)
+  const seasonPdaRef = useRef<PublicKey>(getRoomPda(0));
 
   // Ephemeral keypair for ER signing — generate once per mount
   const ephemeralRef = useRef<Keypair>(Keypair.generate());
@@ -278,7 +305,7 @@ export function useGameSession(): GameSessionHook {
             keys: [
               { pubkey: signer.publicKey, isSigner: true, isWritable: true },
               { pubkey: pda, isSigner: false, isWritable: true },
-              { pubkey: SEASON_PDA, isSigner: false, isWritable: false },
+              { pubkey: seasonPdaRef.current, isSigner: false, isWritable: false },
             ],
             data: data as unknown as Buffer,
           });
@@ -437,16 +464,22 @@ export function useGameSession(): GameSessionHook {
     try {
       const program = makeProgram(baseConnection, anchorWallet);
       const pda = getSessionPda(publicKey);
-      const seasonPda = getSeasonPda();
+      const roomId = getRoomId();
+      const roomPda = getRoomPda(roomId);
+      seasonPdaRef.current = roomPda;
       const sk = ephemeralRef.current.publicKey;
+
+      // Fetch room config
+      const seasonData = await (program.account as any).seasonParams.fetch(roomPda);
+      setRoomConfig(seasonData.physics as RoomConfig);
 
       // Step 1: start_run
       await program.methods
-        .startRun(sk)
+        .startRun(sk, roomId)
         .accounts({
           player: publicKey,
           gameSession: pda,
-          seasonParams: seasonPda,
+          seasonParams: roomPda,
           systemProgram: new PublicKey("11111111111111111111111111111111"),
         })
         .rpc({ commitment: "confirmed" });
@@ -542,14 +575,12 @@ export function useGameSession(): GameSessionHook {
 
     try {
       const program = makeProgram(erConn, keypairWallet(ephemeralRef.current));
-      const seasonPda = getSeasonPda();
 
       const ix = await program.methods
         .finishRun()
         .accounts({
           payer: ephemeralRef.current.publicKey,
           gameSession: sessionPda,
-          seasonParams: seasonPda,
         })
         .instruction();
 
@@ -639,6 +670,7 @@ export function useGameSession(): GameSessionHook {
     gameState,
     leaderboard,
     error,
+    roomConfig,
     startNewGame,
     submitFrame,
     finishRun,
