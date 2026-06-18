@@ -499,12 +499,28 @@ export function useGameSession(): GameSessionHook {
       setSessionPda(pda);
       setSessionKey(sk);
 
-      // Wait for delegation to propagate
-      await new Promise((r) => setTimeout(r, 3000));
-      const status = await getDelegationStatus(pda);
+      // Poll for delegation to propagate. A fixed wait is unreliable on slow /
+      // mobile networks where delegation can take longer than a few seconds;
+      // poll until the router reports the PDA delegated (with its ER fqdn),
+      // tolerating transient router errors, up to a deadline.
+      let status: DelegationStatus | null = null;
+      const delegateDeadline = Date.now() + 20000;
+      for (;;) {
+        try {
+          const s = await getDelegationStatus(pda);
+          if (s.isDelegated && s.fqdn) {
+            status = s;
+            break;
+          }
+        } catch {
+          // Router transient (rate limit / propagation) — keep polling.
+        }
+        if (Date.now() >= delegateDeadline) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
 
       resetReconcile();
-      if (status.fqdn) {
+      if (status?.fqdn) {
         const erConn = makeErConnection(status.fqdn);
         erConnectionRef.current = erConn;
         erWarnedRef.current = false;
