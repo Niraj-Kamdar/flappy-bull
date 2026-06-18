@@ -473,8 +473,10 @@ export function useGameSession(): GameSessionHook {
       const seasonData = await (program.account as any).seasonParams.fetch(roomPda);
       setRoomConfig(seasonData.physics as RoomConfig);
 
-      // Step 1: start_run
-      await program.methods
+      // start_run + delegate bundled in one tx → single wallet signature.
+      // delegate's CPI runs after start_run's init_if_needed in the same tx,
+      // so the PDA exists and is program-owned by the time it delegates.
+      const startIx = await program.methods
         .startRun(sk, roomId)
         .accounts({
           player: publicKey,
@@ -482,17 +484,20 @@ export function useGameSession(): GameSessionHook {
           seasonParams: roomPda,
           systemProgram: new PublicKey("11111111111111111111111111111111"),
         })
-        .rpc({ commitment: "confirmed" });
+        .instruction();
+      const delegateIx = await program.methods
+        .delegate()
+        .accounts({ payer: publicKey, gameSession: pda })
+        .instruction();
+
+      const tx = new Transaction().add(startIx, delegateIx);
+      await program.provider.sendAndConfirm!(tx, [], {
+        skipPreflight: true,
+        commitment: "confirmed",
+      });
 
       setSessionPda(pda);
       setSessionKey(sk);
-
-      // Step 2: delegate
-      setPhase("DELEGATING");
-      await program.methods
-        .delegate()
-        .accounts({ payer: publicKey, gameSession: pda })
-        .rpc({ skipPreflight: true, commitment: "confirmed" });
 
       // Wait for delegation to propagate
       await new Promise((r) => setTimeout(r, 3000));
