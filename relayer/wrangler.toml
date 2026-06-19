@@ -11,7 +11,9 @@ routes = [
 ]
 
 [vars]
-BASE_RPC = "https://rpc.magicblock.app/devnet"
+# Helius devnet RPC — the magicblock devnet RPC times out on getAccountInfo,
+# which breaks /settle's account reads.
+BASE_RPC = "https://devnet.helius-rpc.com/?api-key=0ddbecdb-2bee-4911-9767-9aaf9042c68c"
 ALLOWED_ORIGIN = "https://flappybull.metasquare.tech"
 
 # Replay-nonce store (TTL = auth expiry). Create with:

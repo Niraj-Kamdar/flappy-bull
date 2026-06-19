@@ -1,7 +1,12 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 
-export const BASE_RPC = "https://rpc.magicblock.app/devnet";
-export const BASE_WS = "wss://rpc.magicblock.app/devnet";
+// Base-layer (devnet) reads/writes. The magicblock devnet RPC serves getSlot
+// but times out on getAccountInfo, which hangs every account fetch — use the
+// Helius devnet RPC (already used by the leaderboard) for reliable reads.
+export const BASE_RPC =
+  "https://devnet.helius-rpc.com/?api-key=0ddbecdb-2bee-4911-9767-9aaf9042c68c";
+export const BASE_WS =
+  "wss://devnet.helius-rpc.com/?api-key=0ddbecdb-2bee-4911-9767-9aaf9042c68c";
 export const ROUTER = "https://devnet-router.magicblock.app/";
 export const DEFAULT_ER = "https://devnet-as.magicblock.app/";
 
