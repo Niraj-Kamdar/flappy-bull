@@ -5,6 +5,7 @@ type Props = {
   gameState: GameState | null;
   leaderboard: LeaderboardEntry[];
   error: string | null;
+  settleResult: "accepted" | "skipped" | null;
   onPlayAgain: () => void;
   onSubmitScore: () => void;
 };
@@ -14,6 +15,7 @@ export function ResultScreen({
   gameState,
   leaderboard,
   error,
+  settleResult,
   onPlayAgain,
   onSubmitScore,
 }: Props) {
@@ -84,6 +86,17 @@ export function ResultScreen({
             >
               Submit to Leaderboard
             </button>
+          )}
+
+          {settled && settleResult === "accepted" && (
+            <p style={{ color: "#88ff88", fontSize: 14, marginBottom: 12 }}>
+              ✓ Score submitted — you made the leaderboard!
+            </p>
+          )}
+          {settled && settleResult === "skipped" && (
+            <p style={{ color: "#aaa", fontSize: 14, marginBottom: 12 }}>
+              Score submitted — didn't crack the top 10 this run.
+            </p>
           )}
 
           {leaderboard.length > 0 && (

@@ -101,6 +101,7 @@ export type GameSessionHook = {
   leaderboard: LeaderboardEntry[];
   error: string | null;
   roomConfig: RoomConfig | null;
+  settleResult: "accepted" | "skipped" | null;
   startNewGame: () => Promise<void>;
   submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
@@ -237,6 +238,10 @@ export function useGameSession(): GameSessionHook {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [roomConfig, setRoomConfig] = useState<RoomConfig | null>(null);
+  // Feedback after submitScore: did it land on the board or not?
+  const [settleResult, setSettleResult] = useState<
+    "accepted" | "skipped" | null
+  >(null);
 
   // Season PDA for current room (updated in startNewGame)
   const seasonPdaRef = useRef<PublicKey>(getRoomPda(0));
@@ -528,7 +533,7 @@ export function useGameSession(): GameSessionHook {
 
   // ── Fetch leaderboard ──────────────────────────────────────────────────
 
-  const fetchLeaderboard = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async (): Promise<LeaderboardEntry[]> => {
     try {
       const lbPda = getLeaderboardPda();
       const program = makeProgram(baseConnection, anchorWallet!);
@@ -542,10 +547,14 @@ export function useGameSession(): GameSessionHook {
           });
         }
       }
+      FB("fetchLeaderboard: count=", lb.count, "entries=", entries.length);
       setLeaderboard(entries);
-    } catch {
+      return entries;
+    } catch (e: any) {
       // Leaderboard may not exist yet — ignore
+      FBE("fetchLeaderboard:", e?.message);
       setLeaderboard([]);
+      return [];
     }
   }, [anchorWallet]);
 
@@ -566,6 +575,7 @@ export function useGameSession(): GameSessionHook {
     }
     setPhase("STARTING");
     setError(null);
+    setSettleResult(null);
 
     try {
       const program = makeProgram(baseConnection, anchorWallet);
@@ -785,24 +795,46 @@ export function useGameSession(): GameSessionHook {
     if (!publicKey || !sessionPda) return;
     setPhase("SETTLING");
     setError(null);
+    setSettleResult(null);
 
     try {
       // Relayer checks on-chain state and only submits update_leaderboard if the
       // score qualifies for top-10. `{ skipped: true }` = nothing to do (DONE).
       const auth = await ensureAuth();
+      FB("submitScore: POST /settle");
       const resp = await fetch(`${RELAYER}/settle`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ player: publicKey.toBase58(), ...auth }),
       }).then((r) => r.json());
+      FB("submitScore: /settle resp", resp);
       if (resp.error) throw new Error(resp.error);
 
-      // Refresh leaderboard
-      await fetchLeaderboard();
+      const me = publicKey.toBase58();
+      if (resp.settled) {
+        // The relayer fire-and-returns; update_leaderboard isn't confirmed yet.
+        // Poll the leaderboard until our entry appears (or timeout) so the table
+        // actually populates instead of reading stale (empty) state.
+        const deadline = Date.now() + 15000;
+        let entries = await fetchLeaderboard();
+        while (Date.now() < deadline && !entries.some((e) => e.player === me)) {
+          await new Promise((r) => setTimeout(r, 1500));
+          entries = await fetchLeaderboard();
+        }
+        const onBoard = entries.some((e) => e.player === me);
+        FB("submitScore: accepted, onBoard=", onBoard);
+        setSettleResult("accepted");
+      } else {
+        // skipped: didn't qualify for top-10 (or already settled).
+        FB("submitScore: skipped", resp.reason);
+        await fetchLeaderboard();
+        setSettleResult("skipped");
+      }
 
       setGameState((prev) => (prev ? { ...prev, settled: true } : null));
       setPhase("DONE");
     } catch (e: any) {
+      FBE("submitScore:", e?.message);
       setError(e.message);
       setPhase("ERROR");
     }
@@ -816,6 +848,7 @@ export function useGameSession(): GameSessionHook {
     leaderboard,
     error,
     roomConfig,
+    settleResult,
     startNewGame,
     submitFrame,
     finishRun,

@@ -90,6 +90,7 @@ export function GameShell({ price }: Props) {
             gameState={session.gameState}
             leaderboard={session.leaderboard}
             error={session.error}
+            settleResult={session.settleResult}
             onPlayAgain={session.startNewGame}
             onSubmitScore={session.submitScore}
           />
