@@ -82,7 +82,7 @@ export function StartScreen({ phase, onStart }: Props) {
               : "Delegating to rollup..."}
           </p>
           <p style={{ color: "#666", fontSize: 12, marginTop: 8 }}>
-            Approve the transaction in your wallet
+            No wallet approval needed — gas is on us
           </p>
         </>
       )}
