@@ -6,17 +6,14 @@
  */
 export type FlappyBull = {
   "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
-  "metadata": {
-    "name": "flappy_bull",
-    "version": "0.1.0",
-    "spec": "0.1.0",
-    "description": "Flappy Bull game session program"
-  },
   "instructions": [
     {
       "name": "delegate",
       "docs": [
-        "Delegate the GameSession PDA to the ER (existing pattern)."
+        "Delegate the GameSession PDA to the ER (existing pattern).",
+        "",
+        "`player` is a plain arg (the relayer is `payer`). See `start_run` note on",
+        "the trust trade-off."
       ],
       "discriminator": [
         90,
@@ -183,8 +180,8 @@ export type FlappyBull = {
                 ]
               },
               {
-                "kind": "account",
-                "path": "payer"
+                "kind": "arg",
+                "path": "player"
               }
             ]
           }
@@ -202,7 +199,12 @@ export type FlappyBull = {
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "player",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "finish_run",
@@ -431,7 +433,14 @@ export type FlappyBull = {
     {
       "name": "start_run",
       "docs": [
-        "Player creates/resets a GameSession with a fresh sim state."
+        "Player creates/resets a GameSession with a fresh sim state.",
+        "",
+        "Trust trade-off: `player` is a plain arg (not a signer). The relayer",
+        "pays/broadcasts this tx, so anyone can call it on-chain directly (e.g.",
+        "reset a session). Authorization lives off-chain in the Worker's",
+        "`signMessage` check — this intentionally regresses trustless scoring for",
+        "gasless onboarding. Scores stay sim-honest regardless (`submit_taps`",
+        "recomputes via `step()`; `update_leaderboard` enforces `score <= tick`)."
       ],
       "discriminator": [
         72,
@@ -445,7 +454,7 @@ export type FlappyBull = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -467,7 +476,7 @@ export type FlappyBull = {
                 ]
               },
               {
-                "kind": "account",
+                "kind": "arg",
                 "path": "player"
               }
             ]
@@ -482,6 +491,10 @@ export type FlappyBull = {
         }
       ],
       "args": [
+        {
+          "name": "player",
+          "type": "pubkey"
+        },
         {
           "name": "session_key",
           "type": "pubkey"
@@ -580,7 +593,11 @@ export type FlappyBull = {
     {
       "name": "update_leaderboard",
       "docs": [
-        "Base-layer instruction: verify finished run and insert into leaderboard."
+        "Base-layer instruction: verify finished run and insert into leaderboard.",
+        "",
+        "Relayer is `payer`; the session PDA is derived from the stored",
+        "`game_session.player`, not a signer. See `start_run` note on the trust",
+        "trade-off — the on-chain `score <= tick` + `!settled` guards still hold."
       ],
       "discriminator": [
         72,
@@ -594,7 +611,7 @@ export type FlappyBull = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -617,7 +634,8 @@ export type FlappyBull = {
               },
               {
                 "kind": "account",
-                "path": "player"
+                "path": "game_session.player",
+                "account": "GameSession"
               }
             ]
           }
@@ -653,80 +671,7 @@ export type FlappyBull = {
         121,
         220,
         240
-      ]
-    },
-    {
-      "name": "Leaderboard",
-      "discriminator": [
-        247,
-        186,
-        238,
-        243,
-        194,
-        30,
-        9,
-        36
-      ]
-    },
-    {
-      "name": "SeasonParams",
-      "discriminator": [
-        77,
-        88,
-        56,
-        124,
-        184,
-        182,
-        53,
-        155
-      ]
-    }
-  ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "Unauthorized",
-      "msg": "Only the session key may submit taps"
-    },
-    {
-      "code": 6001,
-      "name": "OutOfOrder",
-      "msg": "Input tick must equal the current sim tick (strict-nonce ordering)"
-    },
-    {
-      "code": 6002,
-      "name": "BullDead",
-      "msg": "Bull is already dead"
-    },
-    {
-      "code": 6003,
-      "name": "RunNotFinished",
-      "msg": "Run must be finished (bull dead) before updating leaderboard"
-    },
-    {
-      "code": 6004,
-      "name": "AlreadySettled",
-      "msg": "This run has already been settled"
-    },
-    {
-      "code": 6005,
-      "name": "NoTapsSubmitted",
-      "msg": "Must submit at least one tap"
-    },
-    {
-      "code": 6006,
-      "name": "ScoreExceedsTick",
-      "msg": "Score cannot exceed tick count"
-    },
-    {
-      "code": 6007,
-      "name": "BadBatch",
-      "msg": "Batch must be non-empty with matching tap and price lengths"
-    }
-  ],
-  "types": [
-    {
-      "name": "GameSession",
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -771,6 +716,16 @@ export type FlappyBull = {
     },
     {
       "name": "Leaderboard",
+      "discriminator": [
+        247,
+        186,
+        238,
+        243,
+        194,
+        30,
+        9,
+        36
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -800,103 +755,17 @@ export type FlappyBull = {
       }
     },
     {
-      "name": "SeasonConfig",
-      "docs": [
-        "Physics config — mirrors sim_core::SeasonConfig field-for-field."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "gravity",
-            "type": "i32"
-          },
-          {
-            "name": "tap_boost",
-            "type": "i32"
-          },
-          {
-            "name": "max_up_vel",
-            "type": "i32"
-          },
-          {
-            "name": "max_vel_y",
-            "type": "i32"
-          },
-          {
-            "name": "scale",
-            "type": "i32"
-          },
-          {
-            "name": "canvas_h_px",
-            "type": "i32"
-          },
-          {
-            "name": "bull_radius_px",
-            "type": "i32"
-          },
-          {
-            "name": "channel_half_min",
-            "type": "i32"
-          },
-          {
-            "name": "lerp_num_base",
-            "type": "i32"
-          },
-          {
-            "name": "lerp_den",
-            "type": "i32"
-          },
-          {
-            "name": "lerp_num_fast",
-            "type": "i32"
-          },
-          {
-            "name": "canvas_w_px",
-            "type": "i32"
-          },
-          {
-            "name": "bull_x_px",
-            "type": "i32"
-          },
-          {
-            "name": "pipe_width_px",
-            "type": "i32"
-          },
-          {
-            "name": "pipe_scroll",
-            "type": "i32"
-          },
-          {
-            "name": "pipe_spacing_px",
-            "type": "i32"
-          },
-          {
-            "name": "price_vel_fast_thresh",
-            "type": "i64"
-          },
-          {
-            "name": "price_frac_scale",
-            "type": "i64"
-          },
-          {
-            "name": "season",
-            "type": "u8"
-          },
-          {
-            "name": "_pad",
-            "type": {
-              "array": [
-                "u8",
-                3
-              ]
-            }
-          }
-        ]
-      }
-    },
-    {
       "name": "SeasonParams",
+      "discriminator": [
+        77,
+        88,
+        56,
+        124,
+        184,
+        182,
+        53,
+        155
+      ],
       "type": {
         "kind": "struct",
         "fields": [
@@ -914,63 +783,49 @@ export type FlappyBull = {
           }
         ]
       }
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Only the session key may submit taps"
     },
     {
-      "name": "SimState",
-      "docs": [
-        "Fixed-point sim state — mirrors sim_core::SimState field-for-field."
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "bull_y",
-            "type": "i32"
-          },
-          {
-            "name": "vel_y",
-            "type": "i32"
-          },
-          {
-            "name": "channel_center",
-            "type": "i32"
-          },
-          {
-            "name": "tick",
-            "type": "u32"
-          },
-          {
-            "name": "score",
-            "type": "u32"
-          },
-          {
-            "name": "price",
-            "type": "i64"
-          },
-          {
-            "name": "flags",
-            "type": "u32"
-          },
-          {
-            "name": "pipe_x",
-            "type": {
-              "array": [
-                "i32",
-                4
-              ]
-            }
-          },
-          {
-            "name": "pipe_gap",
-            "type": {
-              "array": [
-                "i32",
-                4
-              ]
-            }
-          }
-        ]
-      }
+      "code": 6001,
+      "name": "OutOfOrder",
+      "msg": "Input tick must equal the current sim tick (strict-nonce ordering)"
+    },
+    {
+      "code": 6002,
+      "name": "BullDead",
+      "msg": "Bull is already dead"
+    },
+    {
+      "code": 6003,
+      "name": "RunNotFinished",
+      "msg": "Run must be finished (bull dead) before updating leaderboard"
+    },
+    {
+      "code": 6004,
+      "name": "AlreadySettled",
+      "msg": "This run has already been settled"
+    },
+    {
+      "code": 6005,
+      "name": "NoTapsSubmitted",
+      "msg": "Must submit at least one tap"
+    },
+    {
+      "code": 6006,
+      "name": "ScoreExceedsTick",
+      "msg": "Score cannot exceed tick count"
+    },
+    {
+      "code": 6007,
+      "name": "BadBatch",
+      "msg": "Batch must be non-empty with matching tap and price lengths"
     }
-  ]
+  ],
+  "version": "0.1.0"
 };

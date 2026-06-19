@@ -220,13 +220,25 @@ pub mod flappy_bull {
     }
 
     /// Player creates/resets a GameSession with a fresh sim state.
-    pub fn start_run(ctx: Context<StartRun>, session_key: Pubkey, room_id: u8) -> Result<()> {
+    ///
+    /// Trust trade-off: `player` is a plain arg (not a signer). The relayer
+    /// pays/broadcasts this tx, so anyone can call it on-chain directly (e.g.
+    /// reset a session). Authorization lives off-chain in the Worker's
+    /// `signMessage` check — this intentionally regresses trustless scoring for
+    /// gasless onboarding. Scores stay sim-honest regardless (`submit_taps`
+    /// recomputes via `step()`; `update_leaderboard` enforces `score <= tick`).
+    pub fn start_run(
+        ctx: Context<StartRun>,
+        player: Pubkey,
+        session_key: Pubkey,
+        room_id: u8,
+    ) -> Result<()> {
         let gs = &mut ctx.accounts.game_session;
         let cfg: SimConfig = ctx.accounts.season_params.physics.into();
         let price = gs.sim_state.price;
         let mid_y = cfg.canvas_h_px * cfg.scale / 2;
 
-        gs.player = ctx.accounts.player.key();
+        gs.player = player;
         gs.session_key = session_key;
         gs.room_id = room_id;
         gs.start_slot = Clock::get()?.slot;
@@ -244,10 +256,13 @@ pub mod flappy_bull {
     }
 
     /// Delegate the GameSession PDA to the ER (existing pattern).
-    pub fn delegate(ctx: Context<DelegateSession>) -> Result<()> {
+    ///
+    /// `player` is a plain arg (the relayer is `payer`). See `start_run` note on
+    /// the trust trade-off.
+    pub fn delegate(ctx: Context<DelegateSession>, player: Pubkey) -> Result<()> {
         ctx.accounts.delegate_game_session(
             &ctx.accounts.payer,
-            &[b"session", ctx.accounts.payer.key().as_ref()],
+            &[b"session", player.as_ref()],
             DelegateConfig::default(),
         )?;
         msg!("GameSession delegated");
@@ -388,6 +403,10 @@ pub mod flappy_bull {
     }
 
     /// Base-layer instruction: verify finished run and insert into leaderboard.
+    ///
+    /// Relayer is `payer`; the session PDA is derived from the stored
+    /// `game_session.player`, not a signer. See `start_run` note on the trust
+    /// trade-off — the on-chain `score <= tick` + `!settled` guards still hold.
     pub fn update_leaderboard(ctx: Context<UpdateLeaderboard>) -> Result<()> {
         let gs = &mut ctx.accounts.game_session;
         let lb = &mut ctx.accounts.leaderboard;
@@ -489,15 +508,15 @@ pub struct InitLeaderboard<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(session_key: Pubkey, room_id: u8)]
+#[instruction(player: Pubkey, session_key: Pubkey, room_id: u8)]
 pub struct StartRun<'info> {
     #[account(mut)]
-    pub player: Signer<'info>,
+    pub payer: Signer<'info>, // relayer pays rent + fees
     #[account(
         init_if_needed,
-        payer = player,
+        payer = payer,
         space = GameSession::SPACE,
-        seeds = [b"session", player.key().as_ref()],
+        seeds = [b"session", player.as_ref()],
         bump
     )]
     pub game_session: Account<'info, GameSession>,
@@ -511,14 +530,15 @@ pub struct StartRun<'info> {
 
 #[delegate]
 #[derive(Accounts)]
+#[instruction(player: Pubkey)]
 pub struct DelegateSession<'info> {
     #[account(mut)]
-    pub payer: Signer<'info>,
+    pub payer: Signer<'info>, // relayer pays fees
     /// CHECK: PDA to delegate
     #[account(
         mut,
         del,
-        seeds = [b"session", payer.key().as_ref()],
+        seeds = [b"session", player.as_ref()],
         bump
     )]
     pub game_session: UncheckedAccount<'info>,
@@ -556,10 +576,10 @@ pub struct FinishRun<'info> {
 #[derive(Accounts)]
 pub struct UpdateLeaderboard<'info> {
     #[account(mut)]
-    pub player: Signer<'info>,
+    pub payer: Signer<'info>, // relayer pays fees
     #[account(
         mut,
-        seeds = [b"session", player.key().as_ref()],
+        seeds = [b"session", game_session.player.as_ref()],
         bump,
     )]
     pub game_session: Account<'info, GameSession>,
