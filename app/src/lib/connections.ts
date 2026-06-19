@@ -8,7 +8,7 @@ export const DEFAULT_ER = "https://devnet-as.magicblock.app/";
 // Cloudflare Worker relayer. Pays + broadcasts the base-layer txs
 // (start_run/delegate, update_leaderboard) so the user needs zero devnet SOL.
 // Set this to the deployed `workers.dev` URL after `wrangler deploy`.
-export const RELAYER = "https://flappy-bull-relayer.REPLACE_ME.workers.dev";
+export const RELAYER = "https://api.flappybull.metasquare.tech";
 
 export const baseConnection = new Connection(BASE_RPC, {
   commitment: "confirmed",
