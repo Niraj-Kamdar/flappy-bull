@@ -6,7 +6,7 @@ use sim_core::{
     init_state, is_alive, step, SeasonConfig as SimConfig, SimState as SimCoreState,
 };
 
-declare_id!("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
+declare_id!("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
 
 // ── Newtype wrappers for sim-core types ─────────────────────────────────────
 // sim-core is wasm-first (no anchor-lang). Wrappers let us serialize for PDAs

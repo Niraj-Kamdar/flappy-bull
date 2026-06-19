@@ -12,7 +12,7 @@ import {
 } from "../lib/connections";
 import idlJson from "../idl/flappy_bull.json";
 
-const PROGRAM_ID = new PublicKey("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
+const PROGRAM_ID = new PublicKey("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
 
 // sha256("global:submit_taps")[0..8]
 const SUBMIT_TAPS_DISC = new Uint8Array([136, 226, 222, 173, 237, 63, 94, 102]);

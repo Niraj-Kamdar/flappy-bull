@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-const PROGRAM_ID = "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm";
+const PROGRAM_ID = "HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS";
 
 export function Footer() {
   const navigate = useNavigate();

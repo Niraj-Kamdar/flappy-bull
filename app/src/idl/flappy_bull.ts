@@ -5,7 +5,13 @@
  * IDL can be found at `target/idl/flappy_bull.json`.
  */
 export type FlappyBull = {
-  "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
+  "address": "HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS",
+  "metadata": {
+    "name": "flappy_bull",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Flappy Bull game session program"
+  },
   "instructions": [
     {
       "name": "delegate",
@@ -55,38 +61,38 @@ export type FlappyBull = {
             "program": {
               "kind": "const",
               "value": [
-                56,
-                185,
-                7,
-                107,
-                191,
-                9,
-                110,
-                77,
-                150,
-                133,
-                217,
-                230,
-                192,
-                152,
-                236,
-                157,
-                17,
-                107,
-                99,
-                237,
-                150,
-                17,
-                186,
+                251,
+                140,
+                215,
+                204,
+                37,
+                212,
+                60,
                 200,
-                176,
-                102,
-                95,
-                148,
-                47,
-                40,
-                94,
-                198
+                229,
+                87,
+                51,
+                247,
+                187,
+                239,
+                71,
+                132,
+                160,
+                67,
+                51,
+                184,
+                125,
+                142,
+                180,
+                39,
+                159,
+                238,
+                20,
+                91,
+                211,
+                189,
+                155,
+                23
               ]
             }
           }
@@ -188,7 +194,7 @@ export type FlappyBull = {
         },
         {
           "name": "owner_program",
-          "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
+          "address": "HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS"
         },
         {
           "name": "delegation_program",
@@ -671,48 +677,7 @@ export type FlappyBull = {
         121,
         220,
         240
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "player",
-            "type": "pubkey"
-          },
-          {
-            "name": "session_key",
-            "type": "pubkey"
-          },
-          {
-            "name": "room_id",
-            "type": "u8"
-          },
-          {
-            "name": "start_slot",
-            "type": "u64"
-          },
-          {
-            "name": "tap_count",
-            "type": "u32"
-          },
-          {
-            "name": "alive",
-            "type": "bool"
-          },
-          {
-            "name": "settled",
-            "type": "bool"
-          },
-          {
-            "name": "sim_state",
-            "type": {
-              "defined": {
-                "name": "SimState"
-              }
-            }
-          }
-        ]
-      }
+      ]
     },
     {
       "name": "Leaderboard",
@@ -725,34 +690,7 @@ export type FlappyBull = {
         30,
         9,
         36
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "players",
-            "type": {
-              "array": [
-                "pubkey",
-                10
-              ]
-            }
-          },
-          {
-            "name": "scores",
-            "type": {
-              "array": [
-                "u32",
-                10
-              ]
-            }
-          },
-          {
-            "name": "count",
-            "type": "u8"
-          }
-        ]
-      }
+      ]
     },
     {
       "name": "SeasonParams",
@@ -765,24 +703,7 @@ export type FlappyBull = {
         182,
         53,
         155
-      ],
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "authority",
-            "type": "pubkey"
-          },
-          {
-            "name": "physics",
-            "type": {
-              "defined": {
-                "name": "SeasonConfig"
-              }
-            }
-          }
-        ]
-      }
+      ]
     }
   ],
   "errors": [
@@ -827,5 +748,253 @@ export type FlappyBull = {
       "msg": "Batch must be non-empty with matching tap and price lengths"
     }
   ],
-  "version": "0.1.0"
+  "types": [
+    {
+      "name": "GameSession",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "session_key",
+            "type": "pubkey"
+          },
+          {
+            "name": "room_id",
+            "type": "u8"
+          },
+          {
+            "name": "start_slot",
+            "type": "u64"
+          },
+          {
+            "name": "tap_count",
+            "type": "u32"
+          },
+          {
+            "name": "alive",
+            "type": "bool"
+          },
+          {
+            "name": "settled",
+            "type": "bool"
+          },
+          {
+            "name": "sim_state",
+            "type": {
+              "defined": {
+                "name": "SimState"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Leaderboard",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "players",
+            "type": {
+              "array": [
+                "pubkey",
+                10
+              ]
+            }
+          },
+          {
+            "name": "scores",
+            "type": {
+              "array": [
+                "u32",
+                10
+              ]
+            }
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeasonConfig",
+      "docs": [
+        "Physics config — mirrors sim_core::SeasonConfig field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "gravity",
+            "type": "i32"
+          },
+          {
+            "name": "tap_boost",
+            "type": "i32"
+          },
+          {
+            "name": "max_up_vel",
+            "type": "i32"
+          },
+          {
+            "name": "max_vel_y",
+            "type": "i32"
+          },
+          {
+            "name": "scale",
+            "type": "i32"
+          },
+          {
+            "name": "canvas_h_px",
+            "type": "i32"
+          },
+          {
+            "name": "bull_radius_px",
+            "type": "i32"
+          },
+          {
+            "name": "channel_half_min",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_num_base",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_den",
+            "type": "i32"
+          },
+          {
+            "name": "lerp_num_fast",
+            "type": "i32"
+          },
+          {
+            "name": "canvas_w_px",
+            "type": "i32"
+          },
+          {
+            "name": "bull_x_px",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_width_px",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_scroll",
+            "type": "i32"
+          },
+          {
+            "name": "pipe_spacing_px",
+            "type": "i32"
+          },
+          {
+            "name": "price_vel_fast_thresh",
+            "type": "i64"
+          },
+          {
+            "name": "price_frac_scale",
+            "type": "i64"
+          },
+          {
+            "name": "season",
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                3
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SeasonParams",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "physics",
+            "type": {
+              "defined": {
+                "name": "SeasonConfig"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "SimState",
+      "docs": [
+        "Fixed-point sim state — mirrors sim_core::SimState field-for-field."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bull_y",
+            "type": "i32"
+          },
+          {
+            "name": "vel_y",
+            "type": "i32"
+          },
+          {
+            "name": "channel_center",
+            "type": "i32"
+          },
+          {
+            "name": "tick",
+            "type": "u32"
+          },
+          {
+            "name": "score",
+            "type": "u32"
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "flags",
+            "type": "u32"
+          },
+          {
+            "name": "pipe_x",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
+          },
+          {
+            "name": "pipe_gap",
+            "type": {
+              "array": [
+                "i32",
+                4
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ]
 };
