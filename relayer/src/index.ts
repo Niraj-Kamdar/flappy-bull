@@ -25,7 +25,7 @@ interface Env {
   SESSIONS: KVNamespace;
 }
 
-const PROGRAM_ID = new PublicKey("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
+const PROGRAM_ID = new PublicKey("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
 
 // Reject /start when the relayer can no longer cover rent + delegation escrow.
 const BALANCE_FLOOR_LAMPORTS = 20_000_000; // 0.02 SOL
@@ -166,6 +166,24 @@ function json(env: Env, status: number, body: unknown): Response {
   });
 }
 
+// Submit a signed tx WITHOUT blocking on confirmation. The magicblock base RPC
+// can take >30s to report a confirmation even when the tx lands in seconds, so
+// blocking here would 500 a tx that actually succeeded. We fire-and-return the
+// signature; the client polls delegation/leaderboard state on its own.
+async function sendNoWait(
+  connection: Connection,
+  tx: Transaction,
+  relayer: Keypair
+): Promise<string> {
+  tx.feePayer = relayer.publicKey;
+  tx.recentBlockhash = (await connection.getLatestBlockhash("confirmed")).blockhash;
+  tx.sign(relayer);
+  return connection.sendRawTransaction(tx.serialize(), {
+    skipPreflight: true,
+    maxRetries: 5,
+  });
+}
+
 // ── handlers ───────────────────────────────────────────────────────────────────
 
 async function handleStart(env: Env, body: any): Promise<Response> {
@@ -209,10 +227,7 @@ async function handleStart(env: Env, body: any): Promise<Response> {
     .instruction();
 
   const tx = new Transaction().add(startIx, delegateIx);
-  const sig = await (program.provider as AnchorProvider).sendAndConfirm!(tx, [], {
-    skipPreflight: true,
-    commitment: "confirmed",
-  });
+  const sig = await sendNoWait(connection, tx, relayer);
 
   return json(env, 200, {
     sessionPda: pda.toBase58(),
@@ -259,14 +274,15 @@ async function handleSettle(env: Env, body: any): Promise<Response> {
     return json(env, 200, { skipped: true, reason: "score below top-10" });
   }
 
-  const sig = await program.methods
+  const ix = await program.methods
     .updateLeaderboard()
     .accounts({
       payer: relayer.publicKey,
       gameSession: pda,
       leaderboard: lbPda,
     })
-    .rpc({ skipPreflight: true, commitment: "confirmed" });
+    .instruction();
+  const sig = await sendNoWait(program.provider.connection, new Transaction().add(ix), relayer);
 
   return json(env, 200, { settled: true, signature: sig });
 }

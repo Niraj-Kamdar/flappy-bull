@@ -5,22 +5,27 @@ compatibility_flags = ["nodejs_compat"]
 
 # Devnet base-layer RPC the relayer pays/broadcasts against, and the exact
 # production origin allowed by CORS.
+# Custom domain for the relayer API (zone must be on this Cloudflare account).
+routes = [
+  { pattern = "api.flappybull.metasquare.tech", custom_domain = true }
+]
+
 [vars]
 BASE_RPC = "https://rpc.magicblock.app/devnet"
-ALLOWED_ORIGIN = "https://flappy-bull.netlify.app"
+ALLOWED_ORIGIN = "https://flappybull.metasquare.tech"
 
 # Replay-nonce store (TTL = auth expiry). Create with:
 #   wrangler kv namespace create NONCES
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "NONCES"
-id = "REPLACE_WITH_NONCES_KV_ID"
+id = "d43c8c7bd352439fb352933d5ae8f6a1"
 
 # Worker-minted ephemeral session keys, keyed by player (served on re-request).
 # Create with: wrangler kv namespace create SESSIONS
 [[kv_namespaces]]
 binding = "SESSIONS"
-id = "REPLACE_WITH_SESSIONS_KV_ID"
+id = "84c8968e293f4ab1adb7a82aa8519f16"
 
 # RELAYER_SECRET_KEY (a fresh DEVNET keypair file's JSON byte array) is a secret:
 #   wrangler secret put RELAYER_SECRET_KEY
