@@ -1,0 +1,19 @@
+{
+  "name": "flappy-bull-relayer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "0.32.1",
+    "@solana/web3.js": "^1.98.0",
+    "tweetnacl": "^1.0.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5",
+    "wrangler": "^3.90.0"
+  }
+}

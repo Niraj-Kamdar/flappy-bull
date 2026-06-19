@@ -1,0 +1,26 @@
+name = "flappy-bull-relayer"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Devnet base-layer RPC the relayer pays/broadcasts against, and the exact
+# production origin allowed by CORS.
+[vars]
+BASE_RPC = "https://rpc.magicblock.app/devnet"
+ALLOWED_ORIGIN = "https://flappy-bull.netlify.app"
+
+# Replay-nonce store (TTL = auth expiry). Create with:
+#   wrangler kv namespace create NONCES
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "NONCES"
+id = "REPLACE_WITH_NONCES_KV_ID"
+
+# Worker-minted ephemeral session keys, keyed by player (served on re-request).
+# Create with: wrangler kv namespace create SESSIONS
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "REPLACE_WITH_SESSIONS_KV_ID"
+
+# RELAYER_SECRET_KEY (a fresh DEVNET keypair file's JSON byte array) is a secret:
+#   wrangler secret put RELAYER_SECRET_KEY
