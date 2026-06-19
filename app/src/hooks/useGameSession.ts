@@ -14,6 +14,10 @@ import idlJson from "../idl/flappy_bull.json";
 
 const PROGRAM_ID = new PublicKey("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
 
+// Verbose debug logging — filter console with "[FB]".
+const FB = (...a: any[]) => console.log("[FB]", ...a);
+const FBE = (...a: any[]) => console.error("[FB][ERR]", ...a);
+
 // sha256("global:submit_taps")[0..8]
 const SUBMIT_TAPS_DISC = new Uint8Array([136, 226, 222, 173, 237, 63, 94, 102]);
 
@@ -223,6 +227,9 @@ export function useGameSession(): GameSessionHook {
   // One off-chain auth signature, captured at connect and reused until expiry.
   // Every relayer request carries it; the Worker verifies player + nonce + sig.
   const authRef = useRef<{ message: string; signature: string } | null>(null);
+  // In-flight signMessage promise — dedupes concurrent ensureAuth() callers
+  // (rehydrate + startNewGame) so the wallet only ever shows one prompt.
+  const authPromiseRef = useRef<Promise<{ message: string; signature: string }> | null>(null);
 
   const [phase, setPhase] = useState<GamePhase>("IDLE");
   const [sessionPda, setSessionPda] = useState<PublicKey | null>(null);
@@ -252,25 +259,45 @@ export function useGameSession(): GameSessionHook {
   // Produce (and cache) the one connect signature. The Worker verifies the
   // message prefix, player match, expiry, nonce-unseen and the ed25519 sig.
   async function ensureAuth(): Promise<{ message: string; signature: string }> {
+    FB("ensureAuth: enter, cached=", !!authRef.current, "inFlight=", !!authPromiseRef.current, "hasSignMessage=", !!signMessage);
     if (authRef.current) return authRef.current;
+    if (authPromiseRef.current) {
+      FB("ensureAuth: reusing in-flight signMessage");
+      return authPromiseRef.current;
+    }
     if (!publicKey || !signMessage) {
+      FBE("ensureAuth: wallet cannot sign messages (publicKey/signMessage missing)");
       throw new Error("Wallet does not support message signing");
     }
     const nonce = crypto.randomUUID();
     const expiry = Math.floor(Date.now() / 1000) + 3600; // 1h
     const message = `flappy-bull:connect:${publicKey.toBase58()}:${nonce}:${expiry}`;
-    const sig = await signMessage(new TextEncoder().encode(message));
-    const auth = { message, signature: bytesToB64(sig) };
-    authRef.current = auth;
-    return auth;
+    FB("ensureAuth: calling signMessage(...) — awaiting wallet", message);
+    const p = (async () => {
+      try {
+        const sig = await signMessage(new TextEncoder().encode(message));
+        FB("ensureAuth: signMessage returned, sigLen=", sig?.length);
+        const auth = { message, signature: bytesToB64(sig) };
+        authRef.current = auth;
+        return auth;
+      } catch (e: any) {
+        FBE("ensureAuth: signMessage threw:", e?.message, e);
+        authPromiseRef.current = null; // allow retry
+        throw e;
+      }
+    })();
+    authPromiseRef.current = p;
+    return p;
   }
 
   // Resolve the ephemeral session key: in-memory → localStorage cache →
   // re-request from the Worker (which stored it at /start).
   async function ensureSessionKey(): Promise<Keypair> {
+    FB("ensureSessionKey: enter, inMemory=", !!ephemeralRef.current);
     if (ephemeralRef.current) return ephemeralRef.current;
     if (publicKey) {
       const cached = loadSessionKeyCache(publicKey);
+      FB("ensureSessionKey: localStorage cache hit=", !!cached);
       if (cached) {
         ephemeralRef.current = cached;
         setSessionKey(cached.publicKey);
@@ -279,11 +306,13 @@ export function useGameSession(): GameSessionHook {
     }
     if (!publicKey) throw new Error("No wallet connected");
     const auth = await ensureAuth();
+    FB("ensureSessionKey: POST /session-key");
     const resp = await fetch(`${RELAYER}/session-key`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ player: publicKey.toBase58(), ...auth }),
     }).then((r) => r.json());
+    FB("ensureSessionKey: /session-key resp", resp?.error || "ok");
     if (resp.error || !resp.sessionSecretKey) {
       throw new Error(resp.error || "No session key on relayer");
     }
@@ -411,20 +440,26 @@ export function useGameSession(): GameSessionHook {
     let cancelled = false;
 
     async function hydrate() {
+      FB("hydrate: enter, player=", publicKey?.toBase58(), "pda=", pda.toBase58());
       try {
         // One-time connect prompt: capture the off-chain auth signature so all
         // later relayer calls are prompt-free. The only wallet prompt in the app.
         if (signMessage && !authRef.current) {
+          FB("hydrate: requesting connect signature");
           try {
             await ensureAuth();
-          } catch {
+            FB("hydrate: connect signature captured");
+          } catch (e: any) {
+            FBE("hydrate: ensureAuth failed (continuing):", e?.message);
             // User declined or wallet lacks signMessage (Seeker fallback) —
             // relayer calls will surface a clear error when attempted.
           }
         }
         if (cancelled) return;
         // Check if GameSession account exists
+        FB("hydrate: getAccountInfo(pda) via base RPC...");
         const accountInfo = await baseConnection.getAccountInfo(pda);
+        FB("hydrate: getAccountInfo done, exists=", !!accountInfo);
         if (cancelled || !accountInfo) {
           if (!cancelled) setPhase("IDLE");
           return;
@@ -524,7 +559,11 @@ export function useGameSession(): GameSessionHook {
   // ── startNewGame: startRun + delegate ───────────────────────────────────
 
   const startNewGame = useCallback(async () => {
-    if (!publicKey || !anchorWallet) return;
+    FB("startNewGame: click, hasPublicKey=", !!publicKey, "hasAnchorWallet=", !!anchorWallet);
+    if (!publicKey || !anchorWallet) {
+      FBE("startNewGame: missing publicKey/anchorWallet — returning early");
+      return;
+    }
     setPhase("STARTING");
     setError(null);
 
@@ -534,20 +573,26 @@ export function useGameSession(): GameSessionHook {
       const roomId = getRoomId();
       const roomPda = getRoomPda(roomId);
       seasonPdaRef.current = roomPda;
+      FB("startNewGame: roomId=", roomId, "roomPda=", roomPda.toBase58(), "sessionPda=", pda.toBase58());
 
       // Fetch room config (read-only, no signature)
+      FB("startNewGame: fetching seasonParams (room config) via base RPC...");
       const seasonData = await (program.account as any).seasonParams.fetch(roomPda);
+      FB("startNewGame: seasonParams fetched OK, season=", seasonData?.physics?.season);
       setRoomConfig(seasonData.physics as RoomConfig);
 
       // Relayer pays + broadcasts start_run + delegate. The user signs nothing
       // here — only the connect-time auth signature is reused. The Worker mints
       // the ephemeral session key, returns it, and we cache it for ER signing.
+      FB("startNewGame: ensureAuth()...");
       const auth = await ensureAuth();
+      FB("startNewGame: auth ready, POST", `${RELAYER}/start`);
       const resp = await fetch(`${RELAYER}/start`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ player: publicKey.toBase58(), roomId, ...auth }),
       }).then((r) => r.json());
+      FB("startNewGame: /start resp", resp?.error ? `ERROR: ${resp.error}` : `ok sessionPda=${resp.sessionPda} sig=${resp.signature}`);
       if (resp.error || !resp.sessionSecretKey) {
         throw new Error(resp.error || "Relayer did not return a session key");
       }
@@ -563,19 +608,27 @@ export function useGameSession(): GameSessionHook {
       // mobile networks where delegation can take longer than a few seconds;
       // poll until the router reports the PDA delegated (with its ER fqdn),
       // tolerating transient router errors, up to a deadline.
+      FB("startNewGame: polling delegation status (router)...");
       let status: DelegationStatus | null = null;
       const delegateDeadline = Date.now() + 20000;
+      let polls = 0;
       for (;;) {
         try {
           const s = await getDelegationStatus(pda);
+          polls++;
           if (s.isDelegated && s.fqdn) {
+            FB("startNewGame: delegated after", polls, "polls, fqdn=", s.fqdn);
             status = s;
             break;
           }
-        } catch {
+        } catch (e: any) {
+          FB("startNewGame: delegation poll transient err", e?.message);
           // Router transient (rate limit / propagation) — keep polling.
         }
-        if (Date.now() >= delegateDeadline) break;
+        if (Date.now() >= delegateDeadline) {
+          FBE("startNewGame: delegation poll TIMED OUT after", polls, "polls");
+          break;
+        }
         await new Promise((r) => setTimeout(r, 500));
       }
 
@@ -594,8 +647,10 @@ export function useGameSession(): GameSessionHook {
         tick: 0,
         settled: false,
       });
+      FB("startNewGame: -> PLAYING");
       setPhase("PLAYING");
     } catch (e: any) {
+      FBE("startNewGame: caught", e?.message, e);
       setError(e.message);
       setPhase("ERROR");
     }

@@ -187,7 +187,9 @@ async function sendNoWait(
 // ── handlers ───────────────────────────────────────────────────────────────────
 
 async function handleStart(env: Env, body: any): Promise<Response> {
+  console.log("[FB] /start: enter, player=", body?.player, "roomId=", body?.roomId);
   const playerKey = await verifyAuth(env, body);
+  console.log("[FB] /start: auth verified");
   const roomId = Number(body.roomId);
   if (!Number.isInteger(roomId) || roomId < 0 || roomId > 255) {
     throw new HttpError(400, "Bad roomId");
@@ -198,6 +200,7 @@ async function handleStart(env: Env, body: any): Promise<Response> {
   const connection = program.provider.connection;
 
   const balance = await connection.getBalance(relayer.publicKey);
+  console.log("[FB] /start: relayer balance=", balance);
   if (balance < BALANCE_FLOOR_LAMPORTS) {
     throw new HttpError(503, "Relayer balance too low — try again later");
   }
@@ -226,8 +229,10 @@ async function handleStart(env: Env, body: any): Promise<Response> {
     .accounts({ payer: relayer.publicKey, gameSession: pda })
     .instruction();
 
+  console.log("[FB] /start: built ixs, sending start_run+delegate, pda=", pda.toBase58());
   const tx = new Transaction().add(startIx, delegateIx);
   const sig = await sendNoWait(connection, tx, relayer);
+  console.log("[FB] /start: sent, sig=", sig);
 
   return json(env, 200, {
     sessionPda: pda.toBase58(),
@@ -308,6 +313,7 @@ export default {
     }
 
     const url = new URL(request.url);
+    console.log("[FB]", request.method, url.pathname, "origin=", request.headers.get("origin"));
     try {
       if (request.method === "GET" && url.pathname === "/health") {
         return await handleHealth(env);
@@ -325,8 +331,11 @@ export default {
       }
       return json(env, 404, { error: "Not found" });
     } catch (e: any) {
-      if (e instanceof HttpError) return json(env, e.status, { error: e.message });
-      console.error("[relayer]", e?.message, e?.stack);
+      if (e instanceof HttpError) {
+        console.log("[FB] HttpError", e.status, e.message);
+        return json(env, e.status, { error: e.message });
+      }
+      console.error("[FB][ERR]", url.pathname, e?.message, e?.stack);
       return json(env, 500, { error: e?.message ?? "Internal error" });
     }
   },
