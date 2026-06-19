@@ -447,20 +447,9 @@ export function useGameSession(): GameSessionHook {
     async function hydrate() {
       FB("hydrate: enter, player=", publicKey?.toBase58(), "pda=", pda.toBase58());
       try {
-        // One-time connect prompt: capture the off-chain auth signature so all
-        // later relayer calls are prompt-free. The only wallet prompt in the app.
-        if (signMessage && !authRef.current) {
-          FB("hydrate: requesting connect signature");
-          try {
-            await ensureAuth();
-            FB("hydrate: connect signature captured");
-          } catch (e: any) {
-            FBE("hydrate: ensureAuth failed (continuing):", e?.message);
-            // User declined or wallet lacks signMessage (Seeker fallback) —
-            // relayer calls will surface a clear error when attempted.
-          }
-        }
-        if (cancelled) return;
+        // No wallet prompt here — auth is captured lazily on the first action
+        // that needs it (startNewGame / stuck-session recovery), so landing on
+        // the page after connect never pops the wallet.
         // Check if GameSession account exists
         FB("hydrate: getAccountInfo(pda) via base RPC...");
         const accountInfo = await baseConnection.getAccountInfo(pda);
