@@ -24,7 +24,7 @@ import { AppRouter } from "./router";
 registerMwa({
   appIdentity: {
     name: "Flappy Bull",
-    uri: "https://flappy-bull.netlify.app",
+    uri: "https://flappybull.metasquare.tech",
     icon: "/icons/icon-192.png",
   },
   authorizationCache: createDefaultAuthorizationCache(),
