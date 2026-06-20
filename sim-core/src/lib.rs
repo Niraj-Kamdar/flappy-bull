@@ -9,6 +9,17 @@ pub const MAX_PIPES: usize = 4;
 /// Sentinel marking an empty pipe slot.
 pub const EMPTY_PIPE: i32 = i32::MIN;
 
+/// Score at which the speed ramp saturates (~60s at 60fps).
+pub const SPEED_RAMP_SCORE_CAP: u32 = 3600;
+/// Bonus scroll = base * min(score, cap) / SPEED_RAMP_DEN.
+pub const SPEED_RAMP_DEN: i64 = 2400;
+
+/// Integer speed ramp: pipe scroll grows with score, capped. No floats.
+fn effective_scroll(base: i32, score: u32) -> i32 {
+    let s = if score > SPEED_RAMP_SCORE_CAP { SPEED_RAMP_SCORE_CAP } else { score };
+    base + ((base as i64 * s as i64) / SPEED_RAMP_DEN) as i32
+}
+
 /// Fixed-point sim state — Copy, repr(C). Scalars + a fixed ring of pipes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -166,10 +177,12 @@ pub fn step(s: SimState, cfg: &SeasonConfig, tap: bool, price_sample: i64) -> Si
     let mut pipe_gap = s.pipe_gap;
 
     // Scroll live pipes left; recycle off-screen; track rightmost still on field.
+    // Scroll speed ramps with score (Chrome-dino style), capped.
+    let scroll = effective_scroll(cfg.pipe_scroll, s.score);
     let mut rightmost = i32::MIN;
     for x in pipe_x.iter_mut() {
         if *x != EMPTY_PIPE {
-            *x -= cfg.pipe_scroll;
+            *x -= scroll;
             if *x + pipe_w < 0 {
                 *x = EMPTY_PIPE;
             } else if *x > rightmost {

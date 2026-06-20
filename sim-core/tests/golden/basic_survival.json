@@ -14,6 +14,6 @@
   "price_samples": [{"tick": 0, "price": 150000}],
   "steps": 120,
   "expected": {
-    "score": 120, "bull_y": 60996, "vel_y": 540, "alive": true, "state_hash": 867044369
+    "score": 120, "bull_y": 60996, "vel_y": 540, "alive": true, "state_hash": 578076167
   }
 }

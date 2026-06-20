@@ -12,7 +12,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 /// Native-computed FNV-1a hash of the scenario below. Regenerate by setting to 0,
 /// running `cargo test -p sim-core wasm_identity`, and copying the reported value.
-const EXPECTED_HASH: u64 = 4_283_330_002_414_317_598;
+const EXPECTED_HASH: u64 = 3_889_247_856_722_124_448;
 
 fn run_scenario() -> u64 {
     let cfg = SeasonConfig::default();
