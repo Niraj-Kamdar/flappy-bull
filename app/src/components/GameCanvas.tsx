@@ -392,6 +392,13 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
 
         let dbgFrame = 0;
         let dbgErrored = false;
+        // Fixed-timestep sim: advance physics at a constant 60 ticks/sec
+        // independent of render FPS. Without this the game runs at display speed
+        // (2x on a 120Hz monitor, 0.5x on a throttled 30Hz tab). MAX_SUBSTEPS
+        // caps catch-up after a stall so we never spiral.
+        const FIXED_DT = 1000 / 60;
+        const MAX_SUBSTEPS = 5;
+        let accumulator = 0;
         app.ticker.add(() => {
          try {
           const { channelHalf, volatilityState, priceVelocity } = channelStateRef.current;
@@ -405,55 +412,62 @@ export function GameCanvas({ price, sessionPhase, submitFrame, finishRun, canvas
             finishCalledRef.current = false;
           }
 
-          // Drain pending tap flag
-          const tap = pendingTapRef.current;
-          pendingTapRef.current = false;
-
-          // ── WASM authoritative step ──────────────────────────────────────
+          // ── WASM authoritative step (fixed 60Hz timestep) ────────────────
           let bullYPx = (canvasH / 2);
           let channelCenterPx = (canvasH / 2);
           let wasmScore = 0;
-          let wasmAlive = false;
-          let tickBeforeStep = 0;
 
           if (wasmReadyRef.current && wasmCfgRef.current && wasmStateRef.current && tsPhase === "PLAYING") {
-            const p = effectivePrice(priceRef.current);
-            const pLo = priceToLo(p);
-            const pHi = priceToHi(p);
-            tickBeforeStep = wasmStateRef.current.tick;
-            wasm_step(wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi);
+            accumulator += app.ticker.deltaMS;
+            if (accumulator > FIXED_DT * MAX_SUBSTEPS) accumulator = FIXED_DT * MAX_SUBSTEPS;
+
+            while (accumulator >= FIXED_DT && isAlive(wasmStateRef.current.flags)) {
+              accumulator -= FIXED_DT;
+
+              // Drain pending tap — only the first sub-step this frame consumes it.
+              const tap = pendingTapRef.current;
+              pendingTapRef.current = false;
+
+              const p = effectivePrice(priceRef.current);
+              const pLo = priceToLo(p);
+              const pHi = priceToHi(p);
+              const tickBeforeStep = wasmStateRef.current.tick;
+              wasm_step(wasmStateRef.current, wasmCfgRef.current, tap, pLo, pHi);
+              const ws = wasmStateRef.current;
+              if (dbgFrame < 3) console.log("[DBG] post-step f=", dbgFrame, "bull_y=", ws.bull_y, "flags=", ws.flags, "score=", ws.score, "p0x=", ws.pipe0_x, "p0gap=", ws.pipe0_gap);
+              if (dbgFrame % 60 === 0) console.log("[DBG] tick=", ws.tick, "p=", p, "pLo=", pLo, "center=", ws.channel_center,
+                "gaps=", ws.pipe0_gap, ws.pipe1_gap, ws.pipe2_gap, ws.pipe3_gap,
+                "xs=", ws.pipe0_x, ws.pipe1_x, ws.pipe2_x, ws.pipe3_x);
+              dbgFrame++;
+
+              // Strict-nonce streaming: submit EVERY tick contiguously, including
+              // the fatal one (the step that killed the bull). The program applies
+              // the identical input stream in order and dies at the same tick, so
+              // the committed score matches. Skipping ticks would stall the chain.
+              submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
+
+              // Propagate death to TS phase
+              if (!isAlive(ws.flags)) {
+                const ceil = wasmCfgRef.current.bull_radius_px * wasmCfgRef.current.scale;
+                const floor = (wasmCfgRef.current.canvas_h_px - wasmCfgRef.current.bull_radius_px) * wasmCfgRef.current.scale;
+                console.log("[DBG] DEATH tick=", ws.tick, "bull_y=", ws.bull_y, "ceil=", ceil, "floor=", floor,
+                  "p0x=", ws.pipe0_x, "p1x=", ws.pipe1_x, "p2x=", ws.pipe2_x, "p3x=", ws.pipe3_x, "tapThisFrame=", tap);
+                tsStateRef.current = { ...tsStateRef.current, phase: "DEAD" };
+                shakeTicksRef.current = 30;
+
+                // Fire on-chain finishRun (async)
+                if (!finishCalledRef.current) {
+                  finishCalledRef.current = true;
+                  finishRunRef.current();
+                }
+                break;
+              }
+            }
+
             const ws = wasmStateRef.current;
-            if (dbgFrame < 3) console.log("[DBG] post-step f=", dbgFrame, "bull_y=", ws.bull_y, "flags=", ws.flags, "score=", ws.score, "p0x=", ws.pipe0_x, "p0gap=", ws.pipe0_gap);
-            if (dbgFrame % 60 === 0) console.log("[DBG] tick=", ws.tick, "p=", p, "pLo=", pLo, "center=", ws.channel_center,
-              "gaps=", ws.pipe0_gap, ws.pipe1_gap, ws.pipe2_gap, ws.pipe3_gap,
-              "xs=", ws.pipe0_x, ws.pipe1_x, ws.pipe2_x, ws.pipe3_x);
-            dbgFrame++;
             bullYPx = ws.bull_y / SCALE;
             channelCenterPx = ws.channel_center / SCALE;
             wasmScore = ws.score;
-            wasmAlive = isAlive(ws.flags);
-
-            // Strict-nonce streaming: submit EVERY tick contiguously, including
-            // the fatal one (the step that killed the bull). The program applies
-            // the identical input stream in order and dies at the same tick, so
-            // the committed score matches. Skipping ticks would stall the chain.
-            submitFrameRef.current(tickBeforeStep, tap, pLo, pHi);
-
-            // Propagate death to TS phase
-            if (!wasmAlive && tsPhase === "PLAYING") {
-              const ceil = wasmCfgRef.current.bull_radius_px * wasmCfgRef.current.scale;
-              const floor = (wasmCfgRef.current.canvas_h_px - wasmCfgRef.current.bull_radius_px) * wasmCfgRef.current.scale;
-              console.log("[DBG] DEATH tick=", ws.tick, "bull_y=", ws.bull_y, "ceil=", ceil, "floor=", floor,
-                "p0x=", ws.pipe0_x, "p1x=", ws.pipe1_x, "p2x=", ws.pipe2_x, "p3x=", ws.pipe3_x, "tapThisFrame=", tap);
-              tsStateRef.current = { ...tsStateRef.current, phase: "DEAD" };
-              shakeTicksRef.current = 30;
-
-              // Fire on-chain finishRun (async)
-              if (!finishCalledRef.current) {
-                finishCalledRef.current = true;
-                finishRunRef.current();
-              }
-            }
           } else if (wasmStateRef.current) {
             bullYPx = wasmStateRef.current.bull_y / SCALE;
             channelCenterPx = wasmStateRef.current.channel_center / SCALE;
