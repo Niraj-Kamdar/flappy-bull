@@ -1,6 +1,6 @@
 {
   "packageId": "app.netlify.flappy_bull.twa",
-  "host": "flappy-bull.netlify.app",
+  "host": "flappybull.metasquare.tech",
   "name": "Flappy Bull",
   "launcherName": "Flappy Bull",
   "display": "standalone",
@@ -13,18 +13,18 @@
   "backgroundColor": "#050510",
   "enableNotifications": true,
   "startUrl": "/",
-  "iconUrl": "https://flappy-bull.netlify.app/icons/icon-512.png",
-  "maskableIconUrl": "https://flappy-bull.netlify.app/icons/maskable-512.png",
+  "iconUrl": "https://flappybull.metasquare.tech/icons/icon-512.png",
+  "maskableIconUrl": "https://flappybull.metasquare.tech/icons/maskable-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "/Users/niraj/Documents/Projects/magicblock/flappy-bull/seeker/android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1",
-  "appVersionCode": 1,
+  "appVersionName": "4",
+  "appVersionCode": 4,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://flappy-bull.netlify.app/manifest.webmanifest",
+  "webManifestUrl": "https://flappybull.metasquare.tech/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
@@ -33,7 +33,7 @@
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://flappy-bull.netlify.app/",
+  "fullScopeUrl": "https://flappybull.metasquare.tech/",
   "minSdkVersion": 21,
   "orientation": "portrait",
   "fingerprints": [
@@ -47,5 +47,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1"
+  "appVersion": "4"
 }

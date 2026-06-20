@@ -8,10 +8,15 @@ import {
   makeErConnection,
   getDelegationStatus,
   DelegationStatus,
+  RELAYER,
 } from "../lib/connections";
 import idlJson from "../idl/flappy_bull.json";
 
-const PROGRAM_ID = new PublicKey("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
+const PROGRAM_ID = new PublicKey("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
+
+// Verbose debug logging — filter console with "[FB]".
+const FB = (...a: any[]) => console.log("[FB]", ...a);
+const FBE = (...a: any[]) => console.error("[FB][ERR]", ...a);
 
 // sha256("global:submit_taps")[0..8]
 const SUBMIT_TAPS_DISC = new Uint8Array([136, 226, 222, 173, 237, 63, 94, 102]);
@@ -96,6 +101,7 @@ export type GameSessionHook = {
   leaderboard: LeaderboardEntry[];
   error: string | null;
   roomConfig: RoomConfig | null;
+  settleResult: "accepted" | "skipped" | null;
   startNewGame: () => Promise<void>;
   submitFrame: (tick: number, tap: boolean, priceLo: number, priceHi: number) => void;
   finishRun: () => Promise<void>;
@@ -121,36 +127,40 @@ function getLeaderboardPda(): PublicKey {
 }
 
 /**
- * Session key is persisted per player in localStorage so it survives page
- * reloads. Without this, a fresh `Keypair.generate()` each mount would not
- * match the on-chain `session_key` set at start_run, and every ER tap would
- * fail with `Unauthorized` (0x1770).
+ * The ephemeral session key is now minted by the Worker relayer at `/start`
+ * (keyed by player in KV) and returned to the client. We cache the secret in
+ * localStorage so it survives reloads without a round-trip; on a cache miss it
+ * is re-requested via `/session-key`. It must match the on-chain `session_key`
+ * set at start_run, or every ER tap fails with `Unauthorized` (0x1770).
  */
 function sessionKeyStorageKey(player: PublicKey): string {
   return `flappybull:sessionkey:${player.toBase58()}`;
 }
 
-function loadOrCreateSessionKey(player: PublicKey): Keypair {
+function b64ToBytes(b64: string): Uint8Array {
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+function bytesToB64(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
+
+function loadSessionKeyCache(player: PublicKey): Keypair | null {
   try {
     const raw = localStorage.getItem(sessionKeyStorageKey(player));
-    if (raw) {
-      return Keypair.fromSecretKey(
-        Uint8Array.from(atob(raw), (c) => c.charCodeAt(0))
-      );
-    }
+    if (raw) return Keypair.fromSecretKey(b64ToBytes(raw));
   } catch {
-    // fall through to generate
+    // fall through
   }
-  const kp = Keypair.generate();
+  return null;
+}
+
+function saveSessionKeyCache(player: PublicKey, kp: Keypair): void {
   try {
-    localStorage.setItem(
-      sessionKeyStorageKey(player),
-      btoa(String.fromCharCode(...kp.secretKey))
-    );
+    localStorage.setItem(sessionKeyStorageKey(player), bytesToB64(kp.secretKey));
   } catch {
-    // localStorage unavailable — key won't persist, but game still works in-session
+    // localStorage unavailable — key won't persist, recover via /session-key
   }
-  return kp;
 }
 
 function makeProvider(connection: Connection, wallet: any): AnchorProvider {
@@ -213,7 +223,14 @@ function keypairWallet(kp: Keypair) {
 
 export function useGameSession(): GameSessionHook {
   const anchorWallet = useAnchorWallet();
-  const { publicKey } = useWallet();
+  const { publicKey, signMessage } = useWallet();
+
+  // One off-chain auth signature, captured at connect and reused until expiry.
+  // Every relayer request carries it; the Worker verifies player + nonce + sig.
+  const authRef = useRef<{ message: string; signature: string } | null>(null);
+  // In-flight signMessage promise — dedupes concurrent ensureAuth() callers
+  // (rehydrate + startNewGame) so the wallet only ever shows one prompt.
+  const authPromiseRef = useRef<Promise<{ message: string; signature: string }> | null>(null);
 
   const [phase, setPhase] = useState<GamePhase>("IDLE");
   const [sessionPda, setSessionPda] = useState<PublicKey | null>(null);
@@ -221,15 +238,18 @@ export function useGameSession(): GameSessionHook {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [roomConfig, setRoomConfig] = useState<RoomConfig | null>(null);
+  // Feedback after submitScore: did it land on the board or not?
+  const [settleResult, setSettleResult] = useState<
+    "accepted" | "skipped" | null
+  >(null);
 
   // Season PDA for current room (updated in startNewGame)
   const seasonPdaRef = useRef<PublicKey>(getRoomPda(0));
 
-  // Ephemeral keypair for ER signing — generate once per mount
-  const ephemeralRef = useRef<Keypair>(Keypair.generate());
-  const [sessionKey, setSessionKey] = useState<PublicKey | null>(
-    ephemeralRef.current.publicKey
-  );
+  // Ephemeral keypair for ER signing — minted by the relayer at /start, cached
+  // in localStorage, recoverable via /session-key. Null until first /start.
+  const ephemeralRef = useRef<Keypair | null>(null);
+  const [sessionKey, setSessionKey] = useState<PublicKey | null>(null);
 
   // ER connection (set after delegation)
   const erConnectionRef = useRef<Connection | null>(null);
@@ -238,6 +258,75 @@ export function useGameSession(): GameSessionHook {
   // Set when rehydrate finds a delegated-but-dead (stuck) session that must be
   // committed + undelegated before a new game can start.
   const autoFinishRef = useRef(false);
+
+  // ── Relayer auth + session-key recovery ─────────────────────────────────────
+
+  // Produce (and cache) the one connect signature. The Worker verifies the
+  // message prefix, player match, expiry, nonce-unseen and the ed25519 sig.
+  async function ensureAuth(): Promise<{ message: string; signature: string }> {
+    FB("ensureAuth: enter, cached=", !!authRef.current, "inFlight=", !!authPromiseRef.current, "hasSignMessage=", !!signMessage);
+    if (authRef.current) return authRef.current;
+    if (authPromiseRef.current) {
+      FB("ensureAuth: reusing in-flight signMessage");
+      return authPromiseRef.current;
+    }
+    if (!publicKey || !signMessage) {
+      FBE("ensureAuth: wallet cannot sign messages (publicKey/signMessage missing)");
+      throw new Error("Wallet does not support message signing");
+    }
+    const nonce = crypto.randomUUID();
+    const expiry = Math.floor(Date.now() / 1000) + 3600; // 1h
+    const message = `flappy-bull:connect:${publicKey.toBase58()}:${nonce}:${expiry}`;
+    FB("ensureAuth: calling signMessage(...) — awaiting wallet", message);
+    const p = (async () => {
+      try {
+        const sig = await signMessage(new TextEncoder().encode(message));
+        FB("ensureAuth: signMessage returned, sigLen=", sig?.length);
+        const auth = { message, signature: bytesToB64(sig) };
+        authRef.current = auth;
+        return auth;
+      } catch (e: any) {
+        FBE("ensureAuth: signMessage threw:", e?.message, e);
+        authPromiseRef.current = null; // allow retry
+        throw e;
+      }
+    })();
+    authPromiseRef.current = p;
+    return p;
+  }
+
+  // Resolve the ephemeral session key: in-memory → localStorage cache →
+  // re-request from the Worker (which stored it at /start).
+  async function ensureSessionKey(): Promise<Keypair> {
+    FB("ensureSessionKey: enter, inMemory=", !!ephemeralRef.current);
+    if (ephemeralRef.current) return ephemeralRef.current;
+    if (publicKey) {
+      const cached = loadSessionKeyCache(publicKey);
+      FB("ensureSessionKey: localStorage cache hit=", !!cached);
+      if (cached) {
+        ephemeralRef.current = cached;
+        setSessionKey(cached.publicKey);
+        return cached;
+      }
+    }
+    if (!publicKey) throw new Error("No wallet connected");
+    const auth = await ensureAuth();
+    FB("ensureSessionKey: POST /session-key");
+    const resp = await fetch(`${RELAYER}/session-key`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ player: publicKey.toBase58(), ...auth }),
+    }).then((r) => r.json());
+    FB("ensureSessionKey: /session-key resp", resp?.error || "ok");
+    if (resp.error || !resp.sessionSecretKey) {
+      throw new Error(resp.error || "No session key on relayer");
+    }
+    const kp = Keypair.fromSecretKey(b64ToBytes(resp.sessionSecretKey));
+    ephemeralRef.current = kp;
+    saveSessionKeyCache(publicKey, kp);
+    setSessionKey(kp.publicKey);
+    return kp;
+  }
 
   // ── Batch-stream reconciliation state ──────────────────────────────────────
   // inputLogRef: every frame's input, index == tick (the full replay log).
@@ -271,10 +360,10 @@ export function useGameSession(): GameSessionHook {
     if (sendingRef.current) return senderPromiseRef.current ?? Promise.resolve();
     const erConn = erConnectionRef.current;
     const pda = sessionPda;
-    if (!erConn || !pda) return Promise.resolve();
+    const signer = ephemeralRef.current;
+    if (!erConn || !pda || !signer) return Promise.resolve();
 
     sendingRef.current = true;
-    const signer = ephemeralRef.current;
     const p = (async () => {
       try {
         for (;;) {
@@ -344,10 +433,11 @@ export function useGameSession(): GameSessionHook {
       return;
     }
 
-    // Load (or create) the persisted session key for this player.
-    const kp = loadOrCreateSessionKey(publicKey);
-    ephemeralRef.current = kp;
-    setSessionKey(kp.publicKey);
+    // Load the cached session key if present (recovered from /session-key
+    // otherwise, lazily, when an ER action needs it).
+    const cached = loadSessionKeyCache(publicKey);
+    ephemeralRef.current = cached;
+    setSessionKey(cached ? cached.publicKey : null);
 
     const pda = getSessionPda(publicKey);
     setSessionPda(pda);
@@ -355,9 +445,15 @@ export function useGameSession(): GameSessionHook {
     let cancelled = false;
 
     async function hydrate() {
+      FB("hydrate: enter, player=", publicKey?.toBase58(), "pda=", pda.toBase58());
       try {
+        // No wallet prompt here — auth is captured lazily on the first action
+        // that needs it (startNewGame / stuck-session recovery), so landing on
+        // the page after connect never pops the wallet.
         // Check if GameSession account exists
+        FB("hydrate: getAccountInfo(pda) via base RPC...");
         const accountInfo = await baseConnection.getAccountInfo(pda);
+        FB("hydrate: getAccountInfo done, exists=", !!accountInfo);
         if (cancelled || !accountInfo) {
           if (!cancelled) setPhase("IDLE");
           return;
@@ -422,11 +518,11 @@ export function useGameSession(): GameSessionHook {
     return () => {
       cancelled = true;
     };
-  }, [publicKey, anchorWallet]);
+  }, [publicKey, anchorWallet, signMessage]);
 
   // ── Fetch leaderboard ──────────────────────────────────────────────────
 
-  const fetchLeaderboard = useCallback(async () => {
+  const fetchLeaderboard = useCallback(async (): Promise<LeaderboardEntry[]> => {
     try {
       const lbPda = getLeaderboardPda();
       const program = makeProgram(baseConnection, anchorWallet!);
@@ -440,10 +536,14 @@ export function useGameSession(): GameSessionHook {
           });
         }
       }
+      FB("fetchLeaderboard: count=", lb.count, "entries=", entries.length);
       setLeaderboard(entries);
-    } catch {
+      return entries;
+    } catch (e: any) {
       // Leaderboard may not exist yet — ignore
+      FBE("fetchLeaderboard:", e?.message);
       setLeaderboard([]);
+      return [];
     }
   }, [anchorWallet]);
 
@@ -457,9 +557,14 @@ export function useGameSession(): GameSessionHook {
   // ── startNewGame: startRun + delegate ───────────────────────────────────
 
   const startNewGame = useCallback(async () => {
-    if (!publicKey || !anchorWallet) return;
+    FB("startNewGame: click, hasPublicKey=", !!publicKey, "hasAnchorWallet=", !!anchorWallet);
+    if (!publicKey || !anchorWallet) {
+      FBE("startNewGame: missing publicKey/anchorWallet — returning early");
+      return;
+    }
     setPhase("STARTING");
     setError(null);
+    setSettleResult(null);
 
     try {
       const program = makeProgram(baseConnection, anchorWallet);
@@ -467,55 +572,62 @@ export function useGameSession(): GameSessionHook {
       const roomId = getRoomId();
       const roomPda = getRoomPda(roomId);
       seasonPdaRef.current = roomPda;
-      const sk = ephemeralRef.current.publicKey;
+      FB("startNewGame: roomId=", roomId, "roomPda=", roomPda.toBase58(), "sessionPda=", pda.toBase58());
 
-      // Fetch room config
+      // Fetch room config (read-only, no signature)
+      FB("startNewGame: fetching seasonParams (room config) via base RPC...");
       const seasonData = await (program.account as any).seasonParams.fetch(roomPda);
+      FB("startNewGame: seasonParams fetched OK, season=", seasonData?.physics?.season);
       setRoomConfig(seasonData.physics as RoomConfig);
 
-      // start_run + delegate bundled in one tx → single wallet signature.
-      // delegate's CPI runs after start_run's init_if_needed in the same tx,
-      // so the PDA exists and is program-owned by the time it delegates.
-      const startIx = await program.methods
-        .startRun(sk, roomId)
-        .accounts({
-          player: publicKey,
-          gameSession: pda,
-          seasonParams: roomPda,
-          systemProgram: new PublicKey("11111111111111111111111111111111"),
-        })
-        .instruction();
-      const delegateIx = await program.methods
-        .delegate()
-        .accounts({ payer: publicKey, gameSession: pda })
-        .instruction();
+      // Relayer pays + broadcasts start_run + delegate. The user signs nothing
+      // here — only the connect-time auth signature is reused. The Worker mints
+      // the ephemeral session key, returns it, and we cache it for ER signing.
+      FB("startNewGame: ensureAuth()...");
+      const auth = await ensureAuth();
+      FB("startNewGame: auth ready, POST", `${RELAYER}/start`);
+      const resp = await fetch(`${RELAYER}/start`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ player: publicKey.toBase58(), roomId, ...auth }),
+      }).then((r) => r.json());
+      FB("startNewGame: /start resp", resp?.error ? `ERROR: ${resp.error}` : `ok sessionPda=${resp.sessionPda} sig=${resp.signature}`);
+      if (resp.error || !resp.sessionSecretKey) {
+        throw new Error(resp.error || "Relayer did not return a session key");
+      }
 
-      const tx = new Transaction().add(startIx, delegateIx);
-      await program.provider.sendAndConfirm!(tx, [], {
-        skipPreflight: true,
-        commitment: "confirmed",
-      });
+      const sk = Keypair.fromSecretKey(b64ToBytes(resp.sessionSecretKey));
+      ephemeralRef.current = sk;
+      saveSessionKeyCache(publicKey, sk);
 
       setSessionPda(pda);
-      setSessionKey(sk);
+      setSessionKey(sk.publicKey);
 
       // Poll for delegation to propagate. A fixed wait is unreliable on slow /
       // mobile networks where delegation can take longer than a few seconds;
       // poll until the router reports the PDA delegated (with its ER fqdn),
       // tolerating transient router errors, up to a deadline.
+      FB("startNewGame: polling delegation status (router)...");
       let status: DelegationStatus | null = null;
       const delegateDeadline = Date.now() + 20000;
+      let polls = 0;
       for (;;) {
         try {
           const s = await getDelegationStatus(pda);
+          polls++;
           if (s.isDelegated && s.fqdn) {
+            FB("startNewGame: delegated after", polls, "polls, fqdn=", s.fqdn);
             status = s;
             break;
           }
-        } catch {
+        } catch (e: any) {
+          FB("startNewGame: delegation poll transient err", e?.message);
           // Router transient (rate limit / propagation) — keep polling.
         }
-        if (Date.now() >= delegateDeadline) break;
+        if (Date.now() >= delegateDeadline) {
+          FBE("startNewGame: delegation poll TIMED OUT after", polls, "polls");
+          break;
+        }
         await new Promise((r) => setTimeout(r, 500));
       }
 
@@ -534,12 +646,14 @@ export function useGameSession(): GameSessionHook {
         tick: 0,
         settled: false,
       });
+      FB("startNewGame: -> PLAYING");
       setPhase("PLAYING");
     } catch (e: any) {
+      FBE("startNewGame: caught", e?.message, e);
       setError(e.message);
       setPhase("ERROR");
     }
-  }, [publicKey, anchorWallet]);
+  }, [publicKey, anchorWallet, signMessage]);
 
   // ── submitFrame: record input, then trigger the batch sender ────────────
 
@@ -577,6 +691,17 @@ export function useGameSession(): GameSessionHook {
       return;
     }
 
+    // The session key signs on the ER. After a reload/auto-finish it may not be
+    // in memory — resolve it from cache or the relayer before committing.
+    let signer: Keypair;
+    try {
+      signer = await ensureSessionKey();
+    } catch (e: any) {
+      setError(e.message);
+      setPhase("ERROR");
+      return;
+    }
+
     // Drain: keep the batch sender running until the program has applied every
     // logged input (incl. the fatal tick) or the bull died on-chain. This
     // guarantees the committed score == client death tick, since finish_run
@@ -595,17 +720,17 @@ export function useGameSession(): GameSessionHook {
     }
 
     try {
-      const program = makeProgram(erConn, keypairWallet(ephemeralRef.current));
+      const program = makeProgram(erConn, keypairWallet(signer));
 
       const ix = await program.methods
         .finishRun()
         .accounts({
-          payer: ephemeralRef.current.publicKey,
+          payer: signer.publicKey,
           gameSession: sessionPda,
         })
         .instruction();
 
-      const sig = await sendErRaw(erConn, ix, ephemeralRef.current);
+      const sig = await sendErRaw(erConn, ix, signer);
 
       // Wait for commit signature
       const commitSig = await GetCommitmentSignature(sig, erConn);
@@ -637,7 +762,7 @@ export function useGameSession(): GameSessionHook {
       setError(e.message);
       setPhase("ERROR");
     }
-  }, [sessionPda, anchorWallet]);
+  }, [sessionPda, anchorWallet, publicKey, signMessage]);
 
   // Recover a stuck (delegated + dead) session found during rehydrate by
   // committing + undelegating it. finish_run handles an already-dead bull.
@@ -656,33 +781,53 @@ export function useGameSession(): GameSessionHook {
   // ── submitScore: update leaderboard on base layer ───────────────────────
 
   const submitScore = useCallback(async () => {
-    if (!publicKey || !anchorWallet || !sessionPda) return;
+    if (!publicKey || !sessionPda) return;
     setPhase("SETTLING");
     setError(null);
+    setSettleResult(null);
 
     try {
-      const program = makeProgram(baseConnection, anchorWallet);
-      const lbPda = getLeaderboardPda();
+      // Relayer checks on-chain state and only submits update_leaderboard if the
+      // score qualifies for top-10. `{ skipped: true }` = nothing to do (DONE).
+      const auth = await ensureAuth();
+      FB("submitScore: POST /settle");
+      const resp = await fetch(`${RELAYER}/settle`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ player: publicKey.toBase58(), ...auth }),
+      }).then((r) => r.json());
+      FB("submitScore: /settle resp", resp);
+      if (resp.error) throw new Error(resp.error);
 
-      await program.methods
-        .updateLeaderboard()
-        .accounts({
-          player: publicKey,
-          gameSession: sessionPda,
-          leaderboard: lbPda,
-        })
-        .rpc({ commitment: "confirmed" });
-
-      // Refresh leaderboard
-      await fetchLeaderboard();
+      const me = publicKey.toBase58();
+      if (resp.settled) {
+        // The relayer fire-and-returns; update_leaderboard isn't confirmed yet.
+        // Poll the leaderboard until our entry appears (or timeout) so the table
+        // actually populates instead of reading stale (empty) state.
+        const deadline = Date.now() + 15000;
+        let entries = await fetchLeaderboard();
+        while (Date.now() < deadline && !entries.some((e) => e.player === me)) {
+          await new Promise((r) => setTimeout(r, 1500));
+          entries = await fetchLeaderboard();
+        }
+        const onBoard = entries.some((e) => e.player === me);
+        FB("submitScore: accepted, onBoard=", onBoard);
+        setSettleResult("accepted");
+      } else {
+        // skipped: didn't qualify for top-10 (or already settled).
+        FB("submitScore: skipped", resp.reason);
+        await fetchLeaderboard();
+        setSettleResult("skipped");
+      }
 
       setGameState((prev) => (prev ? { ...prev, settled: true } : null));
       setPhase("DONE");
     } catch (e: any) {
+      FBE("submitScore:", e?.message);
       setError(e.message);
       setPhase("ERROR");
     }
-  }, [publicKey, anchorWallet, sessionPda, fetchLeaderboard]);
+  }, [publicKey, sessionPda, fetchLeaderboard, signMessage]);
 
   return {
     phase,
@@ -692,6 +837,7 @@ export function useGameSession(): GameSessionHook {
     leaderboard,
     error,
     roomConfig,
+    settleResult,
     startNewGame,
     submitFrame,
     finishRun,

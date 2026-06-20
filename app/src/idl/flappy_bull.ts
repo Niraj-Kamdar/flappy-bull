@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/flappy_bull.json`.
  */
 export type FlappyBull = {
-  "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm",
+  "address": "HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS",
   "metadata": {
     "name": "flappy_bull",
     "version": "0.1.0",
@@ -16,7 +16,10 @@ export type FlappyBull = {
     {
       "name": "delegate",
       "docs": [
-        "Delegate the GameSession PDA to the ER (existing pattern)."
+        "Delegate the GameSession PDA to the ER (existing pattern).",
+        "",
+        "`player` is a plain arg (the relayer is `payer`). See `start_run` note on",
+        "the trust trade-off."
       ],
       "discriminator": [
         90,
@@ -58,38 +61,38 @@ export type FlappyBull = {
             "program": {
               "kind": "const",
               "value": [
-                56,
-                185,
-                7,
-                107,
-                191,
-                9,
-                110,
-                77,
-                150,
-                133,
-                217,
-                230,
-                192,
-                152,
-                236,
-                157,
-                17,
-                107,
-                99,
-                237,
-                150,
-                17,
-                186,
+                251,
+                140,
+                215,
+                204,
+                37,
+                212,
+                60,
                 200,
-                176,
-                102,
-                95,
-                148,
-                47,
-                40,
-                94,
-                198
+                229,
+                87,
+                51,
+                247,
+                187,
+                239,
+                71,
+                132,
+                160,
+                67,
+                51,
+                184,
+                125,
+                142,
+                180,
+                39,
+                159,
+                238,
+                20,
+                91,
+                211,
+                189,
+                155,
+                23
               ]
             }
           }
@@ -183,15 +186,15 @@ export type FlappyBull = {
                 ]
               },
               {
-                "kind": "account",
-                "path": "payer"
+                "kind": "arg",
+                "path": "player"
               }
             ]
           }
         },
         {
           "name": "owner_program",
-          "address": "4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm"
+          "address": "HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS"
         },
         {
           "name": "delegation_program",
@@ -202,7 +205,12 @@ export type FlappyBull = {
           "address": "11111111111111111111111111111111"
         }
       ],
-      "args": []
+      "args": [
+        {
+          "name": "player",
+          "type": "pubkey"
+        }
+      ]
     },
     {
       "name": "finish_run",
@@ -431,7 +439,14 @@ export type FlappyBull = {
     {
       "name": "start_run",
       "docs": [
-        "Player creates/resets a GameSession with a fresh sim state."
+        "Player creates/resets a GameSession with a fresh sim state.",
+        "",
+        "Trust trade-off: `player` is a plain arg (not a signer). The relayer",
+        "pays/broadcasts this tx, so anyone can call it on-chain directly (e.g.",
+        "reset a session). Authorization lives off-chain in the Worker's",
+        "`signMessage` check — this intentionally regresses trustless scoring for",
+        "gasless onboarding. Scores stay sim-honest regardless (`submit_taps`",
+        "recomputes via `step()`; `update_leaderboard` enforces `score <= tick`)."
       ],
       "discriminator": [
         72,
@@ -445,7 +460,7 @@ export type FlappyBull = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -467,7 +482,7 @@ export type FlappyBull = {
                 ]
               },
               {
-                "kind": "account",
+                "kind": "arg",
                 "path": "player"
               }
             ]
@@ -482,6 +497,10 @@ export type FlappyBull = {
         }
       ],
       "args": [
+        {
+          "name": "player",
+          "type": "pubkey"
+        },
         {
           "name": "session_key",
           "type": "pubkey"
@@ -580,7 +599,11 @@ export type FlappyBull = {
     {
       "name": "update_leaderboard",
       "docs": [
-        "Base-layer instruction: verify finished run and insert into leaderboard."
+        "Base-layer instruction: verify finished run and insert into leaderboard.",
+        "",
+        "Relayer is `payer`; the session PDA is derived from the stored",
+        "`game_session.player`, not a signer. See `start_run` note on the trust",
+        "trade-off — the on-chain `score <= tick` + `!settled` guards still hold."
       ],
       "discriminator": [
         72,
@@ -594,7 +617,7 @@ export type FlappyBull = {
       ],
       "accounts": [
         {
-          "name": "player",
+          "name": "payer",
           "writable": true,
           "signer": true
         },
@@ -617,7 +640,8 @@ export type FlappyBull = {
               },
               {
                 "kind": "account",
-                "path": "player"
+                "path": "game_session.player",
+                "account": "GameSession"
               }
             ]
           }

@@ -6,7 +6,8 @@ app/node_modules/
 target/
 app/dist/
 .anchor/
-
+.env
+old-program-deploy*
 # app/src/wasm/
 # templates/
 todo.md

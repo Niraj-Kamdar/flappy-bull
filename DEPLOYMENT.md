@@ -3,7 +3,7 @@
 How to deploy the `flappy_bull` program to devnet, and the one gotcha that will
 otherwise cost you an afternoon.
 
-Program ID: `4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm`
+Program ID: `HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS`
 
 ## TL;DR
 
@@ -102,5 +102,5 @@ solana program close --buffers --url devnet --bypass-warning    # close all + re
 To inspect the deployed program:
 
 ```bash
-solana program show 4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm --url devnet
+solana program show HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS --url devnet
 ```

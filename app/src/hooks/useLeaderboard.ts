@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Connection, PublicKey } from "@solana/web3.js";
 
-const PROGRAM_ID = new PublicKey("4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm");
+const PROGRAM_ID = new PublicKey("HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS");
 const HELIUS_RPC = "https://devnet.helius-rpc.com/?api-key=0ddbecdb-2bee-4911-9767-9aaf9042c68c";
 const POLL_MS = 5 * 60_000;
 

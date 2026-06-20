@@ -221,7 +221,7 @@ Imagine a 90s neon arcade dropped inside a DeFi trading terminal. Dark backgroun
 > Flappy Bull is a game. It does not constitute financial advice. SOL/USD data used for gameplay only.
 
 **Program ID badge (monospace, dim):**
-> `Program: 4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm (devnet)`
+> `Program: HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS (devnet)`
 
 ---
 

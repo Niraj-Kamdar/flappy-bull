@@ -54,7 +54,7 @@ The on-chain program **replays** every tick of your run using the same `step()` 
 
 ### On-Chain Program
 
-**Program ID:** `4pRUMdU5Ha9G2MSriNM5NqhwhYo6Mvuq827FVMBTjHzm` (devnet)
+**Program ID:** `HvwtseJuzu9XzWQ9Xh323BTVqvwpywHz16PAduoQs8vS` (devnet)
 
 | Instruction | Layer | Description |
 |---|---|---|
