@@ -10,6 +10,12 @@ export const BASE_WS =
 export const ROUTER = "https://devnet-router.magicblock.app/";
 export const DEFAULT_ER = "https://devnet-as.magicblock.app/";
 
+// MagicBlock delegation program. A base-layer account owned by this program is
+// delegated to an ephemeral rollup.
+export const DELEGATION_PROGRAM = new PublicKey(
+  "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+);
+
 // Cloudflare Worker relayer. Pays + broadcasts the base-layer txs
 // (start_run/delegate, update_leaderboard) so the user needs zero devnet SOL.
 // Set this to the deployed `workers.dev` URL after `wrangler deploy`.
@@ -51,5 +57,22 @@ export async function getDelegationStatus(
   });
   const body = await res.json();
   if (body.error) throw new Error(body.error.message);
-  return body.result as DelegationStatus;
+  const result = body.result as DelegationStatus;
+  if (result.isDelegated && result.fqdn) return result;
+
+  // Router fallback: it sometimes fails to acknowledge a genuinely-delegated
+  // account (returns isDelegated:false with no fqdn) when the holding validator
+  // isn't in its active routing table — e.g. after a program upgrade. The
+  // authoritative signal is base-layer ownership: if the delegation program owns
+  // the account, it IS delegated. Use DEFAULT_ER since the router gave no fqdn.
+  // This keeps the normal flow working and lets hydrate auto-finish a stuck PDA.
+  try {
+    const info = await baseConnection.getAccountInfo(account);
+    if (info && info.owner.equals(DELEGATION_PROGRAM)) {
+      return { isDelegated: true, fqdn: DEFAULT_ER };
+    }
+  } catch {
+    // fall through to the router's (negative) result
+  }
+  return result;
 }
